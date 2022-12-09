@@ -9,86 +9,70 @@ class Block():
     RF pulses: [V]
     """
 
-    # WIP: Make dictionary of events with time stamp as the key
     def __init__(self, idx, duration):
         self.block_duration = duration
         self.block_idx = idx
-        self.rf_events = []
-        self.grx_events = []
-        self.gry_events = []
-        self.grz_events = []
-        self.adc_events = []
-        self.trig_events = []
-        self.delays = []
+        self.timestamps = {}
 
-    def add_rf(self, duration, delay):
-        rf = Rf(duration, delay)
-        self.rf_events.append(rf)
+    def add_timestamp(self, ts):
+        if not str(ts) in self.timestamps:
+            self.timestamps[str(ts)] = []
+
+    def add_rf(self, duration, shape, ts):
+        self.add_timestamp(ts)
+        rf = Rf(duration, shape, ts)
+        self.timestamps[str(ts)].append(rf)
     
-    def add_grad(self, channel, amp, duration, ramp_up, ramp_dn, delay):
-        grad = Grad(channel, amp, duration, ramp_up, ramp_dn, delay)
-        if channel == 'x':
-            self.grx_events.append(grad)
-        elif channel == 'y':
-            self.gry_events.append(grad)
-        elif channel == 'z':
-            self.grz_events.append(grad)
-        else:
-            raise ValueError("Invalid gradient channel.")
+    def add_grad(self, channel, amp, duration, ramp_up, ramp_dn, shape, ts):
+        self.add_timestamp(ts)
+        grad = Grad(channel, amp, duration, ramp_up, ramp_dn, shape, ts)
+        self.timestamps[str(ts)].append(grad)
 
-    def add_adc(self, duration, samples, delay):
-        adc = Adc(duration, samples, delay)
-        self.adc_events.append(adc)
+    def add_adc(self, duration, samples, ts):
+        self.add_timestamp(ts)
+        adc = Adc(duration, samples, ts)
+        self.timestamps[str(ts)].append(adc)
 
-    def add_trig(self, duration, delay):
-        trig = Trig(duration, delay)
-        self.trig_events.append(trig)
+    def add_trig(self, duration, trig_type, ts):
+        self.add_timestamp(ts)
+        trig = Trig(duration, trig_type, ts)
+        self.timestamps[str(ts)].append(trig)
 
-    def add_delay(self, duration):
-        delay = Delay(duration)
-        self.delays.append(delay)
-
-    def set_freqphase(self, freq_phase, delay):
-        for rf in self.rf_events:
-            if rf.delay == delay:
-                rf.set_freqphase(freq_phase)
-        for adc in self.adc_events:
-            if adc.delay == delay:
-                adc.set_freqphase(freq_phase)
+    def set_freqphase(self, freq_phase, ts):
+        for event in self.timestamps[str(ts)]:
+            if event.type == 'rf' or event.type == 'adc':
+                event.set_freqphase(freq_phase)
 
 class Rf():
 
-    def __init__(self, duration, delay):
+    def __init__(self, duration, shape, delay):
+        self.type = 'rf'
         self.duration = duration
         self.delay = delay
         self.freq = 0
         self.phase = 0
-        self.shape = np.array([])
+        self.shape = np.array(shape)
 
     def set_freqphase(self, freq_phase):
         self.freq = freq_phase[0]
         self.phase = freq_phase[1]
-
-    def set_shape(self, shape):
-        self.shape = np.array(shape)
     
 class Grad():
 
-    def __init__(self, channel, amp, duration, ramp_up, ramp_dn, delay):
+    def __init__(self, channel, amp, duration, ramp_up, ramp_dn, shape, delay):
+        self.type = 'g' + channel 
         self.channel = channel
         self.amp = amp
         self.duration = duration # flat_top + ramp_up
         self.ramp_up = ramp_up
         self.ramp_dn = ramp_dn
         self.delay = delay
-        self.shape = np.array([])
-
-    def set_shape(self, shape):
         self.shape = np.array(shape)
 
 class Adc():
 
     def __init__(self, duration, samples, delay):
+        self.type = 'adc'
         self.duration = duration
         self.samples = samples
         self.delay = delay
@@ -101,14 +85,11 @@ class Adc():
 
 class Trig():
 
-    def __init__(self, duration, delay):
+    def __init__(self, duration, trig_type, delay):
+        self.type = 'trig'
         self.duration = duration
         self.delay = delay
-
-class Delay():
-
-    def __init__(self, duration):
-        self.duration = duration
+        self.trig_type = trig_type
 
 class Sequence():
 
@@ -116,10 +97,16 @@ class Sequence():
         self.n_blocks = 0
         self.duration = 0
         self.block_list = []
-        self.rf_shp = np.array([])
-        self.gx_shp = np.array([])
-        self.gy_shp = np.array([])
-        self.gz_shp = np.array([])
+
+        self.rf_val = np.array([])
+        self.gx_val = np.array([])
+        self.gy_val = np.array([])
+        self.gz_val = np.array([])
+
+        self.rf_delta = 0 
+        self.gx_delta = 0 
+        self.gy_delta = 0 
+        self.gz_delta = 0 
 
     def add_block(self, idx, duration):
         self.n_blocks += 1
@@ -130,10 +117,23 @@ class Sequence():
         return self.block_list[idx]
 
     def set_shapes(self, shapes):
-        self.rf_shp = shapes[0]
-        self.gx_shp = shapes[1]
-        self.gy_shp = shapes[2]
-        self.gz_shp = shapes[3]
+
+        rf_val = shapes[0].values * np.exp(1j*np.deg2rad(shapes[1].values))
+        self.rf_val = rf_val
+        self.gx_val = shapes[2].values
+        self.gy_val = shapes[3].values
+        self.gz_val = shapes[4].values
+        self.rf_delta = int(shapes[0].definitions.horidelta)
+        self.gx_delta = int(shapes[2].definitions.horidelta)
+        self.gy_delta = int(shapes[3].definitions.horidelta)
+        self.gz_delta = int(shapes[4].definitions.horidelta)
+
+    def check_shapes(self, shape_ix):
+        print(len(self.rf_val), shape_ix[0])
+        print(len(self.gx_val), shape_ix[1])
+        print(len(self.gy_val), shape_ix[2])
+        print(len(self.gz_val), shape_ix[3])
+
 
     def write_pulseq(self):
         import pypulseq as pp
@@ -143,6 +143,7 @@ class Sequence():
             pass
         # WIP: check if event block already contains event of same kind, then open new block
         # WIP: split gradients if necessary
+        # WIP: detect delays by comparing the timestamp with the longest previous event
         # WIP: detect trapezoidal/arbitrary gradients via ramp_down time (arbitray has ramp down zero)
         # WIP: convert units
 

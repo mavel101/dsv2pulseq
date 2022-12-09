@@ -37,9 +37,8 @@ def read_dsv(file_prefix, plot=False):
     gry = DSVFile(file_prefix+"_GRY.dsv")
     grz = DSVFile(file_prefix+"_GRZ.dsv")
 
-    rf_val = rfd.values * np.exp(1j*np.deg2rad(rfp.values))
-    values = [rf_val, grx.values, gry.values, grz.values]
-    seq.set_shapes(values)
+    shapes = [rfd, rfp, grx, gry, grz]
+    seq.set_shapes(shapes)
 
     # Read block structure
     read_dsv_inf(file_prefix+"_INF.dsv", seq)
