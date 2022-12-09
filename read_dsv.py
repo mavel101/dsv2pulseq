@@ -30,40 +30,24 @@ def read_dsv(file_prefix, plot=False):
     """
     seq = Sequence()
 
-    read_dsv_inf(file_prefix+"_INF.dsv", seq)
+    # read event shapes
     rfd = DSVFile(file_prefix+"_RFD.dsv")
     rfp = DSVFile(file_prefix+"_RFP.dsv")
     grx = DSVFile(file_prefix+"_GRX.dsv")
     gry = DSVFile(file_prefix+"_GRY.dsv")
     grz = DSVFile(file_prefix+"_GRZ.dsv")
 
+    rf_val = rfd.values * np.exp(1j*np.deg2rad(rfp.values))
+    values = [rf_val, grx.values, gry.values, grz.values]
+    seq.set_shapes(values)
+
+    # Read block structure
+    read_dsv_inf(file_prefix+"_INF.dsv", seq)
+
     if plot:
         plot_seq([rfd,rfp,grx,gry,grz])
-
-    # WIP: All unit set correctly?
-    # WIP: Rotation of gradients?
-    values = [rfd.values, rfp.values, grx.values, gry.values, grz.values]
-    set_shapes(seq, values)
 
     return seq
 
 
-def set_shapes(seq, values):
-    """
-    Set shapes of RF and gradient events
-    """
-
-    rf_val = values[0] * np.exp(1j*np.deg2rad(values[1]))
-    grx_val = values[2]
-    gry_val = values[3]
-    grz_val = values[4]
-
-    pass
-
-def convert_units():
-    """
-    Convert units to SI (Pulseq units)
-    """
-    pass
-
-# seq = read_dsv("dsv_test/gre", plot=True)
+seq = read_dsv("dsv_test/gre", plot=True)
