@@ -9,23 +9,24 @@ class Block():
     RF pulses: [V]
     """
 
-    def __init__(self, idx, duration):
-        self.block_duration = duration
+    def __init__(self, idx, duration, start_time):
         self.block_idx = idx
+        self.block_duration = duration
+        self.start_time = start_time
         self.timestamps = {}
 
     def add_timestamp(self, ts):
         if not str(ts) in self.timestamps:
             self.timestamps[str(ts)] = []
 
-    def add_rf(self, duration, shape, ts):
+    def add_rf(self, duration, shp_ix, ts):
         self.add_timestamp(ts)
-        rf = Rf(duration, shape, ts)
+        rf = Rf(duration, shp_ix, ts)
         self.timestamps[str(ts)].append(rf)
     
-    def add_grad(self, channel, amp, duration, ramp_up, ramp_dn, shape, ts):
+    def add_grad(self, channel, amp, duration, ramp_up, ramp_dn, shp_ix, ts):
         self.add_timestamp(ts)
-        grad = Grad(channel, amp, duration, ramp_up, ramp_dn, shape, ts)
+        grad = Grad(channel, amp, duration, ramp_up, ramp_dn, shp_ix, ts)
         self.timestamps[str(ts)].append(grad)
 
     def add_adc(self, duration, samples, ts):
@@ -45,13 +46,13 @@ class Block():
 
 class Rf():
 
-    def __init__(self, duration, shape, delay):
+    def __init__(self, duration, shp_ix, delay):
         self.type = 'rf'
         self.duration = duration
         self.delay = delay
         self.freq = 0
         self.phase = 0
-        self.shape = np.array(shape)
+        self.shp_ix = shp_ix
 
     def set_freqphase(self, freq_phase):
         self.freq = freq_phase[0]
@@ -59,7 +60,7 @@ class Rf():
     
 class Grad():
 
-    def __init__(self, channel, amp, duration, ramp_up, ramp_dn, shape, delay):
+    def __init__(self, channel, amp, duration, ramp_up, ramp_dn, shp_ix, delay):
         self.type = 'g' + channel 
         self.channel = channel
         self.amp = amp
@@ -67,7 +68,7 @@ class Grad():
         self.ramp_up = ramp_up
         self.ramp_dn = ramp_dn
         self.delay = delay
-        self.shape = np.array(shape)
+        self.shp_ix = shp_ix
 
 class Adc():
 
@@ -108,10 +109,10 @@ class Sequence():
         self.gy_delta = 0 
         self.gz_delta = 0 
 
-    def add_block(self, idx, duration):
+    def add_block(self, idx, duration, start_time):
         self.n_blocks += 1
-        self.duration += duration
-        self.block_list.append(Block(idx, duration))
+        self.duration = start_time + duration
+        self.block_list.append(Block(idx, duration, start_time))
 
     def get_block(self, idx):
         return self.block_list[idx]
@@ -128,22 +129,33 @@ class Sequence():
         self.gy_delta = int(shapes[3].definitions.horidelta)
         self.gz_delta = int(shapes[4].definitions.horidelta)
 
-    def check_shapes(self, shape_ix):
-        print(len(self.rf_val), shape_ix[0])
-        print(len(self.gx_val), shape_ix[1])
-        print(len(self.gy_val), shape_ix[2])
-        print(len(self.gz_val), shape_ix[3])
-
+    def get_shape(self, event):
+        """
+        Gets shape for RF or gradient event
+        """
+        if event.type == 'rf':
+            return self.rf_val[event.shp_ix]
+        elif event.type == 'gx':
+            return self.gx_val[event.shp_ix]
+        elif event.type == 'gy':
+            return self.gy_val[event.shp_ix]
+        elif event.type == 'gz':
+            return self.gz_val[event.shp_ix]
+        else:
+            return None
 
     def write_pulseq(self):
         import pypulseq as pp
 
         pp_seq = pp.Sequence()
         for block in self.block_list:
-            pass
+            for ts in block.timestamps:
+                events = []
+                pp_seq.add_block(*events)
+
         # WIP: check if event block already contains event of same kind, then open new block
         # WIP: split gradients if necessary
-        # WIP: detect delays by comparing the timestamp with the longest previous event
+        # WIP: detect delays by comparing the length of the Pypulseq and dsv blocks
         # WIP: detect trapezoidal/arbitrary gradients via ramp_down time (arbitray has ramp down zero)
         # WIP: convert units
 
