@@ -1,8 +1,8 @@
 import time
 
-from sequence import Sequence
-from read_dsv_samples import DSVFile
-from read_dsv_inf import read_dsv_inf
+from dsv2pulseq.sequence import Sequence
+from dsv2pulseq.read_dsv_samples import DSVFile
+from dsv2pulseq.read_dsv_inf import read_dsv_inf
 
 def plot_seq(dsv):
     """

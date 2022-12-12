@@ -1,5 +1,5 @@
 """
-This code is copied from the dsvreader.py from Markus Boland.
+This code is copied from the dsvreader from Markus Boland.
 """
 
 # coding=utf-8
