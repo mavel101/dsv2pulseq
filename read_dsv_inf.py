@@ -8,7 +8,7 @@ def find_char(s, ch):
                 
 # WIP: set RF and Grad shapes -> use running index for shapes
 # WIP: INF file is different for VB/VD
-def read_dsv_inf(file, seq):
+def read_dsv_inf(file, seq, is_VE=True):
     """ Read INF dsv file (VE)
     """
 

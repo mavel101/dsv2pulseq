@@ -1,10 +1,8 @@
-import numpy as np
+import time
 
 from sequence import Sequence
 from read_dsv_samples import DSVFile
 from read_dsv_inf import read_dsv_inf
-
-# WIP: add init, add script for command line, add setup.py
 
 def plot_seq(dsv):
     """
@@ -31,22 +29,27 @@ def read_dsv(file_prefix, plot=False):
     seq = Sequence()
 
     # read event shapes
+    print("Read RF and gradient shapes.")
+    start_dsv = time.time()
     rfd = DSVFile(file_prefix+"_RFD.dsv")
     rfp = DSVFile(file_prefix+"_RFP.dsv")
     grx = DSVFile(file_prefix+"_GRX.dsv")
     gry = DSVFile(file_prefix+"_GRY.dsv")
     grz = DSVFile(file_prefix+"_GRZ.dsv")
+    end_dsv = time.time()
+    print(f"Finished reading dsv files in {end_dsv-start_dsv}s.")
 
     shapes = [rfd, rfp, grx, gry, grz]
     seq.set_shapes(shapes)
 
     # Read block structure
-    read_dsv_inf(file_prefix+"_INF.dsv", seq)
+    print("Read block structure.")
+    start_inf = time.time()
+    read_dsv_inf(file_prefix+"_INF.dsv", seq, is_VE=True)
+    end_inf = time.time()
+    print(f"Finished reading block structure in {end_inf-start_inf}s.")
 
     if plot:
         plot_seq([rfd,rfp,grx,gry,grz])
 
     return seq
-
-
-seq = read_dsv("dsv_test/gre", plot=True)
