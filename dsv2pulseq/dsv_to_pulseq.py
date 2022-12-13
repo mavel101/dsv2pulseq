@@ -4,9 +4,10 @@ import argparse
 import os
 from dsv2pulseq.read_dsv import read_dsv
 
-# WIP: add simple unit test
+# WIP: add simple unit test, add test comparing gradient/rf values from original Siemens and new Pulseq sequence
 
-defaults = {'out_file': 'external.seq'}
+defaults = {'out_file': 'external.seq',
+            'ref_volt': 223.529007}
 
 def main(args):
 
@@ -16,15 +17,16 @@ def main(args):
         if not os.path.isfile(args.in_file + suffix + '.dsv') or os.path.isfile(args.in_file + suffix + '.DSV'):
             raise OSError(f"DSV file {args.in_file + suffix + '.dsv'} does not exist.")
 
-    print("Okay.")
-    # seq = read_dsv(args.in_file, plot=False)
+    seq = read_dsv(args.in_file, plot=False)
+    seq.write_pulseq(args.out_file, args.ref_volt)
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Create Pulseq sequence file from dsv file.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('in_file', type=str, help='Input dsv file prefix.')
-    parser.add_argument('-o', '--out_file', type=str, help='Output Pulseq file. If not specified, external.seq')
+    parser.add_argument('-o', '--out_file', type=str, help='Output Pulseq file. Default: external.seq')
+    parser.add_argument('-r', '--ref_volt', help='Reference voltage of simulation. Default: 223.529007 V')
 
     parser.set_defaults(**defaults)
     args = parser.parse_args()

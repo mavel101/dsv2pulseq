@@ -37,7 +37,7 @@ def read_dsv(file_prefix, plot=False):
     gry = DSVFile(file_prefix+"_GRY.dsv")
     grz = DSVFile(file_prefix+"_GRZ.dsv")
     end_dsv = time.time()
-    print(f"Finished reading dsv files in {end_dsv-start_dsv}s.")
+    print(f"Finished reading dsv files in {(end_dsv-start_dsv):.2f}s.")
 
     shapes = [rfd, rfp, grx, gry, grz]
     seq.set_shapes(shapes)
@@ -47,7 +47,7 @@ def read_dsv(file_prefix, plot=False):
     start_inf = time.time()
     read_dsv_inf(file_prefix+"_INF.dsv", seq, is_VE=True)
     end_inf = time.time()
-    print(f"Finished reading block structure in {end_inf-start_inf}s.")
+    print(f"Finished reading block structure in {(end_inf-start_inf):.2f}s.")
 
     if plot:
         plot_seq([rfd,rfp,grx,gry,grz])

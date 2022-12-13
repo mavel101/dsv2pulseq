@@ -16,7 +16,7 @@ setup(name='dsv2pulseq',
       license='MIT License',
       packages=['dsv2pulseq'],
       scripts=['dsv2pulseq/dsv_to_pulseq.py'],
-      dependencies = ['numpy'],
+      dependencies = ['numpy, pypulseq'],
       zip_safe=False,
       test_suite="test",
       )

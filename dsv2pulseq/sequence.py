@@ -1,4 +1,5 @@
 import numpy as np
+import os
 
 class Block():
     """
@@ -144,18 +145,93 @@ class Sequence():
         else:
             return None
 
-    def write_pulseq(self):
+    def write_pulseq(self, filename, ref_volt=223.529007):
+        """
+        Create a Pulseq file from the sequence object.
+        filename: Pulseq output filename
+        """
+
         import pypulseq as pp
 
+        filename = os.path.splitext(filename)[0] + '.seq'
+
+        # Conversion factors from dsv to (Py)Pulseq (SI) units
+        cf_time = 1e-6 # [us] -> [s]
+        cf_grad = 1e-3 # [mT/m] -> [T/m]
+        cf_rf = np.pi * 1e3 / ref_volt # [V] -> [Hz] - ref_volt is voltage for 1ms 180 deg rectangular pulse
+
+        # track objects and duration
+        # time tracking is always done in us, as these are integers, time is only converted to [s], when creating a pulseq event
+        pp_block_dur = 0
+        event_check = {'rf': False, 'gx': False, 'gy': False, 'gz': False, 'adc': False, 'trig': False}
+        ts_offset = 0
+
         pp_seq = pp.Sequence()
+        pp_seq.set_definition('Name', filename)
         for block in self.block_list:
-            for ts in block.timestamps:
-                events = []
-                pp_seq.add_block(*events)
+            pp_events = []
+            for k,ts in enumerate(block.timestamps):
+                events = block.timestamps[ts]
+
+                # if the Pulseq block already contains an event of the same kind, the block has to be splitted
+                if any(event_check[event] for event in events):
+                    for pp_event in pp_events:
+                        pp_dur = np.round(pp.calc_duration(pp_event) * 1e6)
+                        # WIP: calculate split points for gradients
+                        # WIP: raise Error, if ADC, Trigger or RF pulse would have to be splitted
+                        pass
+                        
+                    ts_offset = int(ts)
+
+                for event in events:
+                    # add event to the block
+                    event_del = event.delay - ts_offset
+                    if event.type == 'rf':
+                        # WIP: interpolate RF waveform to 1us raster
+                        rf_sig = self.get_shape(event) * cf_rf
+                        rf = pp.make_arbitrary_rf(signal=rf_sig, flip_angle=2*np.pi, delay=event_del*cf_time, freq_offset=event.freq, phase_offset=np.deg2rad(event.phase))
+                        pp_events.append(rf)
+                        event_dur = event_del + event.duration
+                    elif event.type == 'gx' or event.type == 'gy' or event.type == 'gz':
+                        if event.ramp_dn != 0:
+                            # trapezoid
+                            g_flat = (event.duration - event.ramp_down) * cf_time
+                            g = pp.make_trapezoid(channel=event.channel, amplitude=event.amp*cf_grad, flat_time=g_flat, rise_time=event.ramp_up*cf_time, delay=event_del*cf_time)
+                            g.fall_time = event.ramp_dn # in make_trapezoid, its not possible to make an asymetric trapezoid, so we recalculate the area after setting the fall time explicitly
+                            g.area = g.amplitude * (g.flat_time + g.rise_time/2 + g.fall_time/2)
+                            event_dur = event_del + event.duration + event.ramp_dn
+                        else:
+                            # arbitrary
+                            # WIP: Interpolate gradient waveform to gradient raster
+                            g_wf = self.get_shape(event) * cf_grad
+                            g = pp.make_arbitrary_grad(channel=event.channel, waveform=g_wf, delay=event_del*cf_time)
+                            event_dur = event.duration + event_del
+                        pp_events.append(g)
+                    elif event.type == 'adc':
+                        adc = pp.make_adc(num_samples=event.samples, duration=event.duration, delay=event_del*cf_time, freq_offset=event.freq, phase_offset=np.deg2rad(event.phase))
+                        event_dur = event_del + event.duration
+                        pp_events.append(adc)
+                    elif event.type == 'trig':
+                        if event.trig_type == 'EXTRIG0': # only external triggers supported atm
+                            trig = pp.make_digital_output_pulse(channel='ext1', duration=event.duration, delay=event_del*cf_time)
+                            pp_events.append(trig)
+                            event_dur = event_del + event.duration
+
+                    event_check[event.type] = True
+
+                    # calculate new block duration
+                    if event_dur > pp_block_dur:
+                        pp_block_dur = event_dur
+
+                    # add possible delay at end of Siemens block
+                    if k == len(block.timestamps)-1:
+                        ts_rel = int(ts) - ts_offset
+                        if ts_rel > pp_block_dur:
+                            block_delay = (ts_rel - pp_block_dur) * cf_time
+                            delay = pp.make_delay(d=block_delay)
+                            pp_events.append(delay)
+                    
+            pp_seq.add_block(*pp_events)
 
         # WIP: check if event block already contains event of same kind, then open new block
         # WIP: split gradients if necessary
-        # WIP: detect delays by comparing the length of the Pypulseq and dsv blocks
-        # WIP: detect trapezoidal/arbitrary gradients via ramp_down time (arbitray has ramp down zero)
-        # WIP: convert units
-
