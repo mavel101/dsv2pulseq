@@ -5,6 +5,8 @@ import os
 from dsv2pulseq.read_dsv import read_dsv
 
 # WIP: add simple unit test, add test comparing gradient/rf values from original Siemens and new Pulseq sequence
+# WIP: Is code working with dev pypulseq branch on Github? Otherwise use own master and do pull request for all bugs:
+# amplitude in make_trapezoid cant be zero, "bp." bug in make_arbitrary_rf, bug in split_gradient_at
 
 defaults = {'out_file': 'external.seq',
             'ref_volt': 223.529007}
