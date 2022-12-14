@@ -22,7 +22,7 @@ def plot_seq(dsv):
     plt.subplot(515)
     dsv[4].plot()
 
-def read_dsv(file_prefix, ref_volt, plot=False):
+def read_dsv(file_prefix, ref_volt=223.529007, plot=False):
     """ 
     Reads dsv files and returns complete sequence
     """

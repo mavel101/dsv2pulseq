@@ -5,6 +5,7 @@ import os
 from dsv2pulseq.read_dsv import read_dsv
 
 # WIP: add simple unit test, add test comparing gradient/rf values from original Siemens and new Pulseq sequence
+# WIP: Add own Pypulseq branch as submodule, add yml for environment
 # WIP: Do pull request for bugfixes in master branch of pypulseq
 
 defaults = {'out_file': 'external.seq',

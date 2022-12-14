@@ -7,7 +7,11 @@ def find_char(s, ch):
 
 # WIP: VB/VD version
 def read_dsv_inf(file, seq, is_VE=True):
-    """ Read INF dsv file (VE)
+    """ Read INF dsv file (currently only VE)
+
+    The INF file contains the gradients in logical coordinate system (GP,GR,GS),
+    which corresponds to (GY,GX,GZ) in physical coordinate system IF the sequence was simulated
+    in transversal orientation and phase encode direction A -> P
     """
 
     delta = seq.delta
@@ -56,16 +60,7 @@ def read_dsv_inf(file, seq, is_VE=True):
                     adc_dur = float(adc_str[adc_str.rfind('/')+1:].strip())
                     block.add_adc(adc_dur, adc_samples, ts)
                 if line[ix[5]+1:ix[6]].strip():
-                    gx_str = line[ix[5]+1:ix[6]].strip()
-                    gx_ix = find_char(gx_str, '/')
-                    gx_amp = float(gx_str[gx_str.rfind(':')+1:gx_ix[0]].strip())
-                    gx_rut = int(gx_str[gx_ix[0]+1:gx_ix[1]].strip())
-                    gx_dur = int(gx_str[gx_ix[1]+1:gx_ix[2]].strip())
-                    gx_rdt = int(gx_str[gx_ix[2]+1:].strip())
-                    gx_shp_ix = slice((block.start_time+ts)//delta['gx'], (block.start_time+ts+gx_dur+gx_rdt)//delta['gx'])
-                    block.add_grad('x', gx_amp, gx_dur, gx_rut, gx_rdt, gx_shp_ix, ts)
-                if line[ix[6]+1:ix[7]].strip():
-                    gy_str = line[ix[6]+1:ix[7]].strip()
+                    gy_str = line[ix[5]+1:ix[6]].strip()
                     gy_ix = find_char(gy_str, '/')
                     gy_amp = float(gy_str[gy_str.rfind(':')+1:gy_ix[0]].strip())
                     gy_rut = int(gy_str[gy_ix[0]+1:gy_ix[1]].strip())
@@ -73,6 +68,15 @@ def read_dsv_inf(file, seq, is_VE=True):
                     gy_rdt = int(gy_str[gy_ix[2]+1:].strip())
                     gy_shp_ix = slice((block.start_time+ts)//delta['gy'], (block.start_time+ts+gy_dur+gy_rdt)//delta['gy'])
                     block.add_grad('y', gy_amp, gy_dur, gy_rut, gy_rdt, gy_shp_ix, ts)
+                if line[ix[6]+1:ix[7]].strip():
+                    gx_str = line[ix[6]+1:ix[7]].strip()
+                    gx_ix = find_char(gx_str, '/')
+                    gx_amp = float(gx_str[gx_str.rfind(':')+1:gx_ix[0]].strip())
+                    gx_rut = int(gx_str[gx_ix[0]+1:gx_ix[1]].strip())
+                    gx_dur = int(gx_str[gx_ix[1]+1:gx_ix[2]].strip())
+                    gx_rdt = int(gx_str[gx_ix[2]+1:].strip())
+                    gx_shp_ix = slice((block.start_time+ts)//delta['gx'], (block.start_time+ts+gx_dur+gx_rdt)//delta['gx'])
+                    block.add_grad('x', gx_amp, gx_dur, gx_rut, gx_rdt, gx_shp_ix, ts)
                 if line[ix[7]+1:ix[8]].strip():
                     gz_str = line[ix[7]+1:ix[8]].strip()
                     gz_ix = find_char(gz_str, '/')

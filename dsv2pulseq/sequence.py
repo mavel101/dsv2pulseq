@@ -233,6 +233,7 @@ class Sequence():
                                         raise ValueError("Did not recognize event to be concatenated.")                                        
                     else:
                         # no splitting or concatenation of gradients necessary, just start a new block
+                        pp_events.append(pp.make_delay(round_up_to_raster((int(ts)-ts_offset)*self.cf_time, 5))) # account for possible delay
                         pp_seq.add_block(*pp_events)
                         pp_events = []
                         ts_offset = int(ts)
@@ -275,7 +276,7 @@ class Sequence():
                 # add possible delay at end of Siemens block
                 if k == len(block.timestamps)-1 and len(events) == 0:                       
                     ts2 = list(block.timestamps.keys())
-                    block_delay = (int(ts2[-1]) - int(ts2[-2])) * self.cf_time
+                    block_delay = round_up_to_raster((int(ts2[-1]) - int(ts2[-2])) * self.cf_time, 5)
                     delay = pp.make_delay(d=block_delay)
                     pp_events.append(delay)
                 
@@ -310,10 +311,10 @@ class Sequence():
 
         if grad_event.ramp_dn != 0:
             # trapezoid
-            g_flat = round_up_to_raster((grad_event.duration - grad_event.ramp_dn) * self.cf_time, 6)
-            g_ramp_up = round_up_to_raster(grad_event.ramp_up*self.cf_time, 6)
-            g_ramp_dn = round_up_to_raster(grad_event.ramp_dn*self.cf_time, 6)
-            g_del = round_up_to_raster(event_del*self.cf_time, 6)
+            g_flat = round_up_to_raster((grad_event.duration - grad_event.ramp_dn) * self.cf_time, 5)
+            g_ramp_up = round_up_to_raster(grad_event.ramp_up*self.cf_time, 5)
+            g_ramp_dn = round_up_to_raster(grad_event.ramp_dn*self.cf_time, 5)
+            g_del = round_up_to_raster(event_del*self.cf_time, 5)
             return pp.make_trapezoid(channel=grad_event.channel, amplitude=grad_event.amp*self.cf_grad, flat_time=g_flat, rise_time=g_ramp_up, fall_time=g_ramp_dn, delay=g_del, system=system)
         elif grad_event.duration == 0 and grad_event.ramp_up == 0:
             # zero duration gradient
