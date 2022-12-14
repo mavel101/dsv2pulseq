@@ -5,8 +5,7 @@ import os
 from dsv2pulseq.read_dsv import read_dsv
 
 # WIP: add simple unit test, add test comparing gradient/rf values from original Siemens and new Pulseq sequence
-# WIP: Is code working with dev pypulseq branch on Github? Otherwise use own master and do pull request for all bugs:
-# amplitude in make_trapezoid cant be zero, "bp." bug in make_arbitrary_rf, bug in split_gradient_at
+# WIP: Do pull request for bugfixes in master branch of pypulseq
 
 defaults = {'out_file': 'external.seq',
             'ref_volt': 223.529007}
@@ -19,8 +18,8 @@ def main(args):
         if not os.path.isfile(args.in_file + suffix + '.dsv') or os.path.isfile(args.in_file + suffix + '.DSV'):
             raise OSError(f"DSV file {args.in_file + suffix + '.dsv'} does not exist.")
 
-    seq = read_dsv(args.in_file, plot=False)
-    seq.write_pulseq(args.out_file, args.ref_volt)
+    seq = read_dsv(args.in_file, args.ref_volt, plot=False)
+    seq.write_pulseq(args.out_file)
 
 if __name__ == "__main__":
 

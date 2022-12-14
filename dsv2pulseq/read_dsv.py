@@ -22,11 +22,11 @@ def plot_seq(dsv):
     plt.subplot(515)
     dsv[4].plot()
 
-def read_dsv(file_prefix, plot=False):
+def read_dsv(file_prefix, ref_volt, plot=False):
     """ 
     Reads dsv files and returns complete sequence
     """
-    seq = Sequence()
+    seq = Sequence(ref_volt)
 
     # read event shapes
     print("Read RF and gradient shapes.")
