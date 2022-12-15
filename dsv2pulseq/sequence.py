@@ -117,8 +117,12 @@ class Sequence():
         # -> pulse [Hz] = pulse[V]/ref_volt[V] * 500[Hz]
         self.cf_rf = 5e2 / ref_volt # [V] -> [Hz]
 
+        # raster times
         self.rf_raster = 1e-6
         self.grad_raster = 1e-5
+
+        # trigger types
+        self.trig_types = {'EXTRIG0': 'ext1', 'OSC0': 'osc0', 'OSC1': 'osc1'}
 
     def add_block(self, idx, duration, start_time):
         self.n_blocks += 1
@@ -260,12 +264,15 @@ class Sequence():
                         event_dur = event_del + event.duration
                         pp_events.append(adc)
                     elif event.type == 'trig':
-                        if event.trig_type == 'EXTRIG0': # only external triggers supported atm
+                        if event.trig_type in self.trig_types:
                             trig_dur = round_up_to_raster(event.duration*self.cf_time, 6)
                             trig_del = round_up_to_raster(event_del*self.cf_time, 6)
-                            trig = pp.make_digital_output_pulse(channel='ext1', duration=trig_dur, delay=trig_del, system=system)
+                            trig = pp.make_digital_output_pulse(channel=self.trig_types[event.trig_type], duration=trig_dur, delay=trig_del, system=system)
                             pp_events.append(trig)
                             event_dur = event_del + event.duration
+                        else:
+                            print(event.trig_type)
+                            print(f'Unknown trigger type in block with index {block.block_idx}.')
 
                     # save position of event in list
                     event_check[event.type] = len(pp_events)
