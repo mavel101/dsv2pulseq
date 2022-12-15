@@ -110,7 +110,7 @@ class Sequence():
         # Conversion factors from dsv to (Py)Pulseq (SI) units
         self.gamma = 42.576e6
         self.cf_time = 1e-6 # [us] -> [s]
-        self.cf_grad = 1e-3*self.gamma # [mT/m] -> [Hz/m]
+        self.cf_grad = -1* 1e-3*self.gamma # [mT/m] -> [Hz/m], the "-1" is to be compatible to the "XYZ in TRA" mode of Pulseq
 
         # ref_volt is voltage for 1ms 180 deg rectangular pulse
         # pi[rad]/1[ms] = pi[rad]*1000[Hz] = 500[Hz] equals the reference voltage
@@ -161,10 +161,6 @@ class Sequence():
         filename: Pulseq output filename
         """
 
-        # WIP: check interpolation of rf pulses & gradients
-        # WIP: check why gradients end up on wrong axes
-        # WIP: check sign of gradients (especially x)
-
         import pypulseq as pp
         from dsv2pulseq.helper import waveform_from_seqblock, round_up_to_raster
         import time
@@ -190,12 +186,13 @@ class Sequence():
                 events = block.timestamps[ts]
                 concat_g = {'gx': False, 'gy': False, 'gz': False} # helper variable for gradient concatenation
 
-                # if the Pulseq block already contains an event of the same kind, the block has to be splitted
+                # Check if the block has to be splitted (Pulseq only allows one event per channel per block)
                 if any(event_check[event.type] for event in events):
+                    # check if events in the current block cross the split point (and have to be splitted or concatenated themselves)
                     split = any((int(np.round(pp.calc_duration(pp_event) / self.cf_time)) > int(ts) - ts_offset) for pp_event in pp_events)
                     if split:
-                        # if there is an event, that would have to be splitted, the two events of the same kind will be concatenated instead
-                        # it is however only possible to concatenate gradient objects
+                        # If there is a 2nd ADC or RF object in the block, the gradients have to be splitted,
+                        # as ADC and RF objects can not be concatenated
                         check_adc = any(event.type=='adc' for event in events) and event_check['adc']
                         check_rf = any(event.type=='rf' for event in events) and event_check['rf']
                         if check_adc or check_rf:
@@ -217,7 +214,7 @@ class Sequence():
                             ts_offset = int(ts)
                             event_check.fromkeys(event_check,0)
                         else:
-                            # concatenate gradients instead of splitting the event block
+                            # If there is no 2nd ADC or RF in the block, we can just concatenate the gradients (which is easier)
                             for event in events:
                                 if event_check[event.type] is not None:
                                     event_del = event.delay - ts_offset
@@ -276,7 +273,8 @@ class Sequence():
                 # add possible delay at end of Siemens block
                 if k == len(block.timestamps)-1 and len(events) == 0:                       
                     ts2 = list(block.timestamps.keys())
-                    block_delay = round_up_to_raster((int(ts2[-1]) - int(ts2[-2])) * self.cf_time, 5)
+                    block_delay = round_up_to_raster((int(ts2[-2]) - ts_offset) * self.cf_time, 5) # current block length
+                    block_delay += round_up_to_raster((int(ts2[-1]) - int(ts2[-2])) * self.cf_time, 5) # additional delay
                     delay = pp.make_delay(d=block_delay)
                     pp_events.append(delay)
                 
@@ -296,7 +294,8 @@ class Sequence():
 
             rf_sig = self.get_shape(rf_event)
             rf_fac = int(np.round(self.delta[rf_event.type]*self.cf_time/self.rf_raster))
-            rf_sig = np.interp(np.linspace(0,1,rf_fac*len(rf_sig)), np.linspace(0,1,len(rf_sig)), rf_sig)
+            if rf_fac != 1:
+                rf_sig = np.interp(np.linspace(0,1,rf_fac*len(rf_sig)), np.linspace(0,1,len(rf_sig)), rf_sig)
             rf_del = round_up_to_raster(event_del*self.cf_time, 6)
             rf = pp.make_arbitrary_rf(signal=rf_sig, flip_angle=1, delay=rf_del, freq_offset=rf_event.freq, phase_offset=np.deg2rad(rf_event.phase), return_gz=False, system=system)
             rf.signal = rf_sig * self.cf_rf # reset the signal as it gets scaled in make_arbitrary_rf
@@ -311,7 +310,7 @@ class Sequence():
 
         if grad_event.ramp_dn != 0:
             # trapezoid
-            g_flat = round_up_to_raster((grad_event.duration - grad_event.ramp_dn) * self.cf_time, 5)
+            g_flat = round_up_to_raster((grad_event.duration - grad_event.ramp_up) * self.cf_time, 5)
             g_ramp_up = round_up_to_raster(grad_event.ramp_up*self.cf_time, 5)
             g_ramp_dn = round_up_to_raster(grad_event.ramp_dn*self.cf_time, 5)
             g_del = round_up_to_raster(event_del*self.cf_time, 5)
@@ -323,5 +322,6 @@ class Sequence():
             # arbitrary
             g_wf = self.get_shape(grad_event)
             g_fac = int(np.round(self.delta[grad_event.type]*self.cf_time/self.grad_raster))
-            g_wf = np.interp(np.linspace(0,1,g_fac*len(g_wf)), np.linspace(0,1,len(g_wf)), g_wf)
+            if g_fac != 1:
+                g_wf = np.interp(np.linspace(0,1,g_fac*len(g_wf)), np.linspace(0,1,len(g_wf)), g_wf)
             return pp.make_arbitrary_grad(channel=grad_event.channel, waveform=g_wf*self.cf_grad, delay=event_del*self.cf_time, system=system)

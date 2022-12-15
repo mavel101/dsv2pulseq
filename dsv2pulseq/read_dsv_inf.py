@@ -5,7 +5,6 @@ Read a dsv INF file and append blocks to sequence
 def find_char(s, ch):
     return [i for i, ltr in enumerate(s) if ltr == ch]
 
-# WIP: VB/VD version
 def read_dsv_inf(file, seq, is_VE=True):
     """ Read INF dsv file (currently only VE)
 

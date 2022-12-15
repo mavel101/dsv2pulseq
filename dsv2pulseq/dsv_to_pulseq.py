@@ -4,9 +4,11 @@ import argparse
 import os
 from dsv2pulseq.read_dsv import read_dsv
 
-# WIP: add simple unit test, add test comparing gradient/rf values from original Siemens and new Pulseq sequence
-# WIP: Add own Pypulseq branch as submodule, add yml for environment
-# WIP: Do pull request for bugfixes in master branch of pypulseq
+# WIPs: - add simple unit test, add test comparing gradient/rf values from original Siemens and new Pulseq sequence
+#       - Add own Pypulseq branch as submodule, add yml for environment
+#       - VB/VD version of read_dsv_inf
+#       - check interpolation of rf pulses & gradients
+#       - update README
 
 defaults = {'out_file': 'external.seq',
             'ref_volt': 223.529007}
