@@ -1,0 +1,3 @@
+[submodule "pypulseq"]
+	path = pypulseq
+	url = https://github.com/mavel101/pypulseq
