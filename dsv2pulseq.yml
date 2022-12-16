@@ -1,0 +1,10 @@
+name: dsv2pulseq
+channels:
+    - defaults
+dependencies:
+    - python=3.10
+    - pip
+    - numpy
+    - pip:
+        - git+https://github.com/mavel101/dsv2pulseq
+        - git+https://github.com/mavel101/pypulseq@dsv2pulseq

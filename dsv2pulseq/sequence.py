@@ -280,8 +280,12 @@ class Sequence():
                 # add possible delay at end of Siemens block
                 if k == len(block.timestamps)-1 and len(events) == 0:                       
                     ts2 = list(block.timestamps.keys())
-                    block_delay = round_up_to_raster((int(ts2[-2]) - ts_offset) * self.cf_time, 5) # current block length
-                    block_delay += round_up_to_raster((int(ts2[-1]) - int(ts2[-2])) * self.cf_time, 5) # additional delay
+                    if len(ts2) == 1:
+                        last_ts = 0
+                    else:
+                        last_ts = int(ts2[-2])
+                    block_delay = round_up_to_raster((last_ts - ts_offset) * self.cf_time, 5) # current block length
+                    block_delay += round_up_to_raster((int(ts2[-1]) - last_ts) * self.cf_time, 5) # additional delay
                     delay = pp.make_delay(d=block_delay)
                     pp_events.append(delay)
                 

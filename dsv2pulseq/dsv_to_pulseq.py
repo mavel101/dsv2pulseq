@@ -4,9 +4,9 @@ import argparse
 import os
 from dsv2pulseq.read_dsv import read_dsv
 
-# WIPs: - add test comparing gradient/rf values from original Siemens and new Pulseq sequence (with np.allclose)
-#       - Add own Pypulseq branch as submodule, add yml for environment
+# WIPs: - add function "check_dsv" to compare gradient/rf values from original Siemens and new Pulseq sequence (with np.allclose)
 #       - VB/VD version of read_dsv_inf
+#       - check why script is not installed by yml
 #       - check interpolation of rf pulses & gradients
 #       - update README
 
@@ -16,19 +16,19 @@ defaults = {'out_file': 'external.seq',
 def main(args):
 
     # check input
-    sfx = ['_ADC', '_GRX', '_GRY', '_GRZ', '_RFD', '_RFP']
+    sfx = ['_INF', '_GRX', '_GRY', '_GRZ', '_RFD', '_RFP']
     for suffix in sfx:
-        if not os.path.isfile(args.in_file + suffix + '.dsv') or os.path.isfile(args.in_file + suffix + '.DSV'):
-            raise OSError(f"DSV file {args.in_file + suffix + '.dsv'} does not exist.")
+        if not os.path.isfile(args.in_file_prefix + suffix + '.dsv') or os.path.isfile(args.in_file_prefix + suffix + '.DSV'):
+            raise OSError(f"DSV file {args.in_file_prefix + suffix + '.dsv'} does not exist.")
 
-    seq = read_dsv(args.in_file, args.ref_volt, plot=False)
+    seq = read_dsv(args.in_file_prefix, args.ref_volt, plot=False)
     seq.write_pulseq(args.out_file)
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Create Pulseq sequence file from dsv file.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('in_file', type=str, help='Input dsv file prefix.')
+    parser.add_argument('in_file_prefix', type=str, help="Input dsv file prefix. E.g. 'gre'")
     parser.add_argument('-o', '--out_file', type=str, help='Output Pulseq file. Default: external.seq')
     parser.add_argument('-r', '--ref_volt', help='Reference voltage of simulation. Default: 223.529007 V')
 
