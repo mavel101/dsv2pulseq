@@ -2,9 +2,10 @@
 
 Create Pulseq sequence files from Siemens dsv simulation files.
 
-## Dependencies
+## Dependencies & Installation
 
-A Python environment with the dependencies can be installed with the provided yml file: conda env create -f dsv2pulseq.yml.
+A Python environment with the dependencies can be installed with the provided yml file: `conda env create -f dsv2pulseq.yml`.
+Afterwards run: `pip install .`
 This package only depends on numpy and a slightly modified version of PyPulseq [1], which is added as a submodule.
 
 ## Sequence simulation
