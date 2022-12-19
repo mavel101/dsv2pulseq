@@ -13,21 +13,19 @@ class DSVFile:
     This class loads and uncompresses a dsv file.
     """
 
-    # TODO Accelerate decoding process
     def __decode_dsv_values(self):
         """
         Decodes a compressed dsv array
         :return: Decompressed dsv array
 
-        The decompression technique is explained in the IDEA manual on p. 102 - 103
-            ﻿The values are signed 32-bit integers. The real value
-            will be obtained after division by VERTFACTOR.
-            If the same sample value is repeated several times,
-            the value is only listed twice, and the third value
-            specifies the number of repetitions.
-            Only the first sample is stored as an absolute value.
-            All other values are deltas to the preceeding value.
-            (This way it is possible to compress linear slopes.)
+        The values are signed 32-bit integers. The real value
+        will be obtained after division by VERTFACTOR.
+        If the same sample value is repeated several times,
+        the value is only listed twice, and the third value
+        specifies the number of repetitions.
+        Only the first sample is stored as an absolute value.
+        All other values are deltas to the preceeding value.
+        (This way it is possible to compress linear slopes.)
         """
         ndsv = np.zeros((int(self.definitions.samples)), dtype=np.int)
         dsv = np.array(self.values, dtype=np.int)
