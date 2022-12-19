@@ -11,6 +11,8 @@ It has to be simulated with RF phase output (sim /RFP+). Mandatory dsv files are
 
 ### Pulseq output
 
-The conversion can be started by running `dsv_to_pulseq.py -o #OUT_FILE -r #REF_VOLT #IN_FILE_PREFIX. The IN_FILE_PREFIX is the prefix of the dsv files, e.g. "gre" for "gre_XXX.dsv".
+The conversion can be started by running: `dsv_to_pulseq.py -o #OUT_FILE -r #REF_VOLT #IN_FILE_PREFIX`.  
+
+The IN_FILE_PREFIX is the prefix of the dsv files, e.g. "gre" for "gre_XXX.dsv".
 The OUT_FILE is the Pulseq output sequence file (default: "external.seq"). The reference voltage is the voltage the sequence was simulated with (default: 223.529007 V)
 The Pulseq sequence has the same orientation as the original sequence, when running in "XYZ in TRA" mode.
