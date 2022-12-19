@@ -45,7 +45,7 @@ def read_dsv(file_prefix, ref_volt=223.529007, plot=False):
     # Read block structure
     print("Read block structure.")
     start_inf = time.time()
-    read_dsv_inf(file_prefix+"_INF.dsv", seq, is_VE=True)
+    read_dsv_inf(file_prefix+"_INF.dsv", seq)
     end_inf = time.time()
     print(f"Finished reading block structure in {(end_inf-start_inf):.2f}s.")
 

@@ -6,5 +6,5 @@ dependencies:
     - pip
     - numpy
     - pip:
-        - git+https://github.com/mavel101/dsv2pulseq
         - git+https://github.com/mavel101/pypulseq@dsv2pulseq
+        - git+https://github.com/mavel101/dsv2pulseq
