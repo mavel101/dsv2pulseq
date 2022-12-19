@@ -65,7 +65,7 @@ def read_dsv_inf(file, seq, is_VE=True):
                     gy_rut = int(gy_str[gy_ix[0]+1:gy_ix[1]].strip())
                     gy_dur = int(gy_str[gy_ix[1]+1:gy_ix[2]].strip())
                     gy_rdt = int(gy_str[gy_ix[2]+1:].strip())
-                    gy_shp_ix = slice((block.start_time+ts)//delta['gy'], (block.start_time+ts+gy_dur+gy_rdt)//delta['gy'])
+                    gy_shp_ix = slice((block.start_time+ts)//delta['grad'], (block.start_time+ts+gy_dur+gy_rdt)//delta['grad'])
                     block.add_grad('y', gy_amp, gy_dur, gy_rut, gy_rdt, gy_shp_ix, ts)
                 if line[ix[6]+1:ix[7]].strip():
                     gx_str = line[ix[6]+1:ix[7]].strip()
@@ -74,7 +74,7 @@ def read_dsv_inf(file, seq, is_VE=True):
                     gx_rut = int(gx_str[gx_ix[0]+1:gx_ix[1]].strip())
                     gx_dur = int(gx_str[gx_ix[1]+1:gx_ix[2]].strip())
                     gx_rdt = int(gx_str[gx_ix[2]+1:].strip())
-                    gx_shp_ix = slice((block.start_time+ts)//delta['gx'], (block.start_time+ts+gx_dur+gx_rdt)//delta['gx'])
+                    gx_shp_ix = slice((block.start_time+ts)//delta['grad'], (block.start_time+ts+gx_dur+gx_rdt)//delta['grad'])
                     block.add_grad('x', gx_amp, gx_dur, gx_rut, gx_rdt, gx_shp_ix, ts)
                 if line[ix[7]+1:ix[8]].strip():
                     gz_str = line[ix[7]+1:ix[8]].strip()
@@ -83,7 +83,7 @@ def read_dsv_inf(file, seq, is_VE=True):
                     gz_rut = int(gz_str[gz_ix[0]+1:gz_ix[1]].strip())
                     gz_dur = int(gz_str[gz_ix[1]+1:gz_ix[2]].strip())
                     gz_rdt = int(gz_str[gz_ix[2]+1:].strip())
-                    gz_shp_ix = slice((block.start_time+ts)//delta['gz'], (block.start_time+ts+gz_dur+gz_rdt)//delta['gz'])
+                    gz_shp_ix = slice((block.start_time+ts)//delta['grad'], (block.start_time+ts+gz_dur+gz_rdt)//delta['grad'])
                     block.add_grad('z', gz_amp, gz_dur, gz_rut, gz_rdt, gz_shp_ix, ts)
                 if line[ix[8]+1:ix[9]].strip():
                     trig_str = line[ix[8]+1:ix[9]].strip()

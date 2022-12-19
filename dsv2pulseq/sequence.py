@@ -105,7 +105,7 @@ class Sequence():
         self.gy_val = np.array([])
         self.gz_val = np.array([])
 
-        self.delta = {'rf': 5, 'gx': 10, 'gy': 10, 'gz': 10}
+        self.delta = {'rf': 5, 'grad': 10}
 
         # Conversion factors from dsv to (Py)Pulseq (SI) units
         self.gamma = 42.576e6
@@ -116,10 +116,6 @@ class Sequence():
         # pi[rad]/1[ms] = pi[rad]*1000[Hz] = 500[Hz] equals the reference voltage
         # -> pulse [Hz] = pulse[V]/ref_volt[V] * 500[Hz]
         self.cf_rf = 5e2 / ref_volt # [V] -> [Hz]
-
-        # raster times
-        self.rf_raster = 1e-6
-        self.grad_raster = 1e-5
 
         # trigger types
         self.trig_types = {'EXTRIG0': 'ext1', 'OSC0': 'osc0', 'OSC1': 'osc1'}
@@ -140,9 +136,7 @@ class Sequence():
         self.gy_val = shapes[3].values
         self.gz_val = shapes[4].values
         self.delta['rf'] = int(shapes[0].definitions.horidelta)
-        self.delta['gx']= int(shapes[2].definitions.horidelta)
-        self.delta['gy'] = int(shapes[3].definitions.horidelta)
-        self.delta['gz'] = int(shapes[4].definitions.horidelta)
+        self.delta['grad']= int(shapes[2].definitions.horidelta)
 
     def get_shape(self, event):
         """
@@ -175,10 +169,10 @@ class Sequence():
         filename = os.path.splitext(filename)[0] + '.seq'
 
         # set high system values to not produce any errors
-        system = pp.Opts(max_grad=1e4, max_slew=1e4, rf_raster_time=self.rf_raster, grad_raster_time=self.grad_raster, grad_unit='mT/m', slew_unit='mT/m/ms',
-                        rf_ringdown_time=0, rf_dead_time=0)
+        system = pp.Opts(max_grad=1e4, max_slew=1e4, rf_raster_time=self.delta['rf']*self.cf_time, grad_raster_time=self.delta['grad']*self.cf_time, 
+                         grad_unit='mT/m', slew_unit='mT/m/ms', rf_ringdown_time=0, rf_dead_time=0)
 
-        pp_seq = pp.Sequence()
+        pp_seq = pp.Sequence(system=system)
         pp_seq.set_definition('Name', filename)
         for block in self.block_list:
             # track objects and duration
@@ -304,9 +298,6 @@ class Sequence():
             from dsv2pulseq.helper import round_up_to_raster
 
             rf_sig = self.get_shape(rf_event)
-            rf_fac = int(np.round(self.delta[rf_event.type]*self.cf_time/self.rf_raster))
-            if rf_fac != 1:
-                rf_sig = np.interp(np.linspace(0,1,rf_fac*len(rf_sig)), np.linspace(0,1,len(rf_sig)), rf_sig)
             rf_del = round_up_to_raster(event_del*self.cf_time, 6)
             rf = pp.make_arbitrary_rf(signal=rf_sig, flip_angle=1, delay=rf_del, freq_offset=rf_event.freq, phase_offset=np.deg2rad(rf_event.phase), return_gz=False, system=system)
             rf.signal = rf_sig * self.cf_rf # reset the signal as it gets scaled in make_arbitrary_rf
@@ -332,7 +323,4 @@ class Sequence():
         else:
             # arbitrary
             g_wf = self.get_shape(grad_event)
-            g_fac = int(np.round(self.delta[grad_event.type]*self.cf_time/self.grad_raster))
-            if g_fac != 1:
-                g_wf = np.interp(np.linspace(0,1,g_fac*len(g_wf)), np.linspace(0,1,len(g_wf)), g_wf)
             return pp.make_arbitrary_grad(channel=grad_event.channel, waveform=g_wf*self.cf_grad, delay=event_del*self.cf_time, system=system)

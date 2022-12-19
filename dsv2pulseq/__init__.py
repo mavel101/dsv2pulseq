@@ -1,1 +1,1 @@
-from .read_dsv import read_dsv
+from .read_dsv import read_dsv, check_dsv

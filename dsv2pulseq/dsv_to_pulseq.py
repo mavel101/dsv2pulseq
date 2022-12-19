@@ -4,10 +4,8 @@ import argparse
 import os
 from dsv2pulseq.read_dsv import read_dsv
 
-# WIPs: - add function "check_dsv" to compare gradient/rf values from original Siemens and new Pulseq sequence (with np.allclose)
-#       - VB/VD version of read_dsv_inf
+# WIPs: - VB/VD version of read_dsv_inf
 #       - check why script is not installed by yml
-#       - check interpolation of rf pulses & gradients
 #       - update README
 
 defaults = {'out_file': 'external.seq',
