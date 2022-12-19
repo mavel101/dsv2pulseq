@@ -1,6 +1,6 @@
 # dsv2pulseq
 
-Create Pulseq sequence files from Siemens dsv simulation files.
+Create Pulseq sequence files from Siemens dsv simulation files. Currently only the VE line dsv file layout is supported.
 
 ## Dependencies & Installation
 
