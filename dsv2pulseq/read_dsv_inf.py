@@ -5,9 +5,8 @@ Read a dsv INF file and append blocks to sequence
 def find_char(s, ch):
     return [i for i, ltr in enumerate(s) if ltr == ch]
 
-# WIP: VB/VD version
 def read_dsv_inf(file, seq):
-    """ Read INF dsv file (currently only VE)
+    """ Read INF dsv file (tested only for VE)
 
     The INF file contains the gradients in logical coordinate system (GP,GR,GS),
     which corresponds to (GY,GX,GZ) in physical coordinate system IF the sequence was simulated
