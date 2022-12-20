@@ -9,6 +9,7 @@ Afterwards run: `pip install .`.
 
 This package only depends on numpy and a slightly modified version of PyPulseq [1], which is added as a submodule.
 
+Merging data to the original Siemens raw data file for retrospective reconstruction (see "Reconstruction of Pulseq data") requires the twixtools package (https://github.com/pehses/twixtools)
 ## Sequence simulation
 
 The sequence should be simulated in transversal orientation with phase-encode direction A->P and no FOV shift (which is the default).
@@ -35,6 +36,12 @@ There is an experimental function to check the shapes of RF waveforms and gradie
     check_dsv('/path/to/dsv_original/dsv_prefix', '/path/to/dsv_pulseq/dsv_prefix')
 ```
 Note that the RF and gradient waveforms might be slightly different due to fixed rotation matrices in the original sequence for some event blocks.
+
+## Reconstruction of Pulseq data
+
+Data acquired with the converted Pulseq sequence can not be easily reconstructed, as the scan headers containing the meta information are missing.
+With the script: `dsv_to_pulseq.py #IN_FILE_1 #IN_FILE_2 -o #OUT_FILE` the data from the Pulseq sequence (IN_FILE_2) can be inserted into a raw data file acquired with the original sequence (IN_FILE_1).
+The merged output file can be used for rectrospective reconstruction at the scanner.
 
 ## References
 
