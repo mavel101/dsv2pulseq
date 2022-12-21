@@ -3,13 +3,12 @@ Helper functions
 """
 
 import numpy as np
+from pypulseq.Sequence.sequence import Sequence
 
 def waveform_from_seqblock(seq_block):
     """
     extracts gradient waveform from Pypulseq sequence block
     """
-
-    from pypulseq.Sequence.sequence import Sequence
 
     if seq_block.channel == 'x':
         axis = 0

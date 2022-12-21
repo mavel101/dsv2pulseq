@@ -5,6 +5,7 @@ dependencies:
     - python=3.10
     - pip
     - numpy
+    - matplotlib
     - pip:
         - git+https://github.com/mavel101/pypulseq@dsv2pulseq
         - git+https://github.com/pehses/twixtools

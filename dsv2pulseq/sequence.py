@@ -1,5 +1,8 @@
 import numpy as np
 import os
+import time
+import pypulseq as pp
+from dsv2pulseq.helper import round_up_to_raster, waveform_from_seqblock
 
 class Block():
     """
@@ -105,7 +108,8 @@ class Sequence():
         self.gy_val = np.array([])
         self.gz_val = np.array([])
 
-        self.delta = {'rf': 5, 'grad': 10}
+        # raster times
+        self.delta = {'rf': 5, 'grad': 10} # raster times in dsv files [us]
 
         # Conversion factors from dsv to (Py)Pulseq (SI) units
         self.gamma = 42.576e6
@@ -158,10 +162,6 @@ class Sequence():
         Create a Pulseq file from the sequence object.
         filename: Pulseq output filename
         """
-
-        import pypulseq as pp
-        from dsv2pulseq.helper import waveform_from_seqblock, round_up_to_raster
-        import time
 
         print("Create Pulseq sequence file.")
         start_time = time.time()
@@ -294,8 +294,6 @@ class Sequence():
             """
             Make a Pulseq RF event
             """
-            import pypulseq as pp
-            from dsv2pulseq.helper import round_up_to_raster
 
             rf_sig = self.get_shape(rf_event)
             rf_del = round_up_to_raster(event_del*self.cf_time, 6)
@@ -307,8 +305,6 @@ class Sequence():
         """
         Make a Pulseq gradient event
         """
-        import pypulseq as pp
-        from dsv2pulseq.helper import round_up_to_raster
 
         if grad_event.ramp_dn != 0:
             # trapezoid

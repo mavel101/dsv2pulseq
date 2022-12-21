@@ -1,5 +1,5 @@
 import time
-
+import numpy as np
 from dsv2pulseq.sequence import Sequence
 from dsv2pulseq.read_dsv_samples import DSVFile
 from dsv2pulseq.read_dsv_inf import read_dsv_inf
@@ -61,7 +61,6 @@ def check_dsv(file_prefix1, file_prefix2):
     file_prefix1: dsv file prefix of the original sequence
     file_prefix2: dsv file prefix of the Pulseq sequence
     """
-    import numpy as np
     import matplotlib.pyplot as plt
 
     rfd1 = DSVFile(file_prefix1+"_RFD.dsv")
