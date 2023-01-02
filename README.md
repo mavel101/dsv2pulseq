@@ -23,7 +23,7 @@ Example data "gre_XXX.dsv" can be found in the test/test_data folder. These simu
 
 The conversion can be started by running:  
 ```
-    dsv_to_pulseq.py -o #OUT_FILE -r #REF_VOLT #IN_FILE_PREFIX
+dsv_to_pulseq.py -o #OUT_FILE -r #REF_VOLT #IN_FILE_PREFIX
 ```
 from the shell.
 
@@ -33,15 +33,15 @@ The Pulseq sequence has the same orientation as the original sequence, when runn
 
 The conversion can also be done in Python by running:
 ```
-    from dsv2pulseq import read_dsv
-    seq = read_dsv('/path/to/dsv/dsv_prefix')
-    seq.write_pulseq('external.seq')
+from dsv2pulseq import read_dsv
+seq = read_dsv('/path/to/dsv/dsv_prefix')
+seq.write_pulseq('external.seq')
 ```
 
 There is an experimental function to check the shapes of RF waveforms and gradients that plots the difference between the original and converted waveforms:
 ```
-    from dsv2pulseq import check_dsv
-    check_dsv('/path/to/dsv_original/dsv_prefix', '/path/to/dsv_pulseq/dsv_prefix')
+from dsv2pulseq import check_dsv
+check_dsv('/path/to/dsv_original/dsv_prefix', '/path/to/dsv_pulseq/dsv_prefix')
 ```
 Note that the RF and gradient waveforms might be slightly different due to fixed rotation matrices in the original sequence for some event blocks.
 
@@ -50,7 +50,7 @@ Note that the RF and gradient waveforms might be slightly different due to fixed
 Data acquired with the converted Pulseq sequence can not be easily reconstructed, as the scan headers containing the meta information are missing.
 The data from the Pulseq sequence (IN_FILE_2) can be inserted into a raw data file acquired with the original sequence (IN_FILE_1) using twixtools (see dependencies). If twixtools is installed, the following command will insert the data:
 ```
-    dsv_to_pulseq.py #IN_FILE_1 #IN_FILE_2 -o #OUT_FILE
+dsv_to_pulseq.py #IN_FILE_1 #IN_FILE_2 -o #OUT_FILE
 ```
 The merged output file (#OUT_FILE) can be used for rectrospective reconstruction at the scanner.
 
