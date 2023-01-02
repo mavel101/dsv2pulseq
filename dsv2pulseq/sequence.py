@@ -173,7 +173,7 @@ class Sequence():
                          grad_unit='mT/m', slew_unit='mT/m/ms', rf_ringdown_time=0, rf_dead_time=0)
 
         pp_seq = pp.Sequence(system=system)
-        pp_seq.set_definition('Name', filename)
+        pp_seq.set_definition('Name', os.path.basename(filename))
         for block in self.block_list:
             # track objects and duration
             # time tracking is always done in us, as these are integers, time is only converted to [s], when creating a pulseq event
@@ -210,11 +210,11 @@ class Sequence():
                             pp_seq.add_block(*pp_events)
                             pp_events = pp_events_tmp
                             ts_offset = int(ts)
-                            event_check.fromkeys(event_check,0)
+                            event_check = event_check.fromkeys(event_check,0)
                         else:
                             # If there is no 2nd ADC or RF in the block, we can just concatenate the gradients (which is easier)
                             for event in events:
-                                if event_check[event.type] is not None:
+                                if event_check[event.type]:
                                     event_del = event.delay - ts_offset
                                     pp_event = pp_events[event_check[event.type]-1] # find the existing gradient of the same channel
                                     if event.type == 'trig':
@@ -232,7 +232,7 @@ class Sequence():
                         pp_seq.add_block(*pp_events)
                         pp_events = []
                         ts_offset = int(ts)
-                        event_check.fromkeys(event_check,0)
+                        event_check = event_check.fromkeys(event_check,0)
 
                 # add events to the block
                 for event in events:

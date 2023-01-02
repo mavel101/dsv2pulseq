@@ -2,9 +2,9 @@ from dsv2pulseq.read_dsv import read_dsv
 import unittest
 import io
 
-infile = 'test/test_data/gre'
-outfile = 'test/test_data/gre.seq'
-approved = 'test/test_data/approved/gre.seq'
+infile = 'test/test_data/MiniFLASH'
+outfile = 'test/test_data/MiniFLASH.seq'
+approved = 'test/test_data/approved/MiniFLASH.seq'
 
 class test_gre(unittest.TestCase):
 

@@ -11,11 +11,13 @@ Afterwards run: `pip install .`.
 
 This package only depends on numpy and a slightly modified version of PyPulseq [1], which is added as a submodule.
 
-Merging data to the original Siemens raw data file for retrospective reconstruction (see "Reconstruction of Pulseq data") requires the twixtools package (https://github.com/pehses/twixtools)
+Merging data to the original Siemens raw data file for retrospective reconstruction (see "Reconstruction of Pulseq data") requires the twixtools package (https://github.com/pehses/twixtools).
+
 ## Sequence simulation
 
 The sequence should be simulated in transversal orientation with phase-encode direction A->P and no FOV shift (which is the default).
 It has to be simulated with RF phase output (sim /RFP+). Mandatory dsv files are "_INF", "_RFD", "_RFP", "_GRX", "_GRY" and "_GRZ".
+Example data "gre_XXX.dsv" can be found in the test/test_data folder. These simulation files are from the Siemens MiniFLASH demo sequence.
 
 ## Create Pulseq output
 
