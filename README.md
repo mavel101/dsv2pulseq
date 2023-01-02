@@ -21,7 +21,11 @@ Example data "gre_XXX.dsv" can be found in the test/test_data folder. These simu
 
 ## Create Pulseq output
 
-The conversion can be started by running the script: `dsv_to_pulseq.py -o #OUT_FILE -r #REF_VOLT #IN_FILE_PREFIX`.  
+The conversion can be started by running:  
+```
+    dsv_to_pulseq.py -o #OUT_FILE -r #REF_VOLT #IN_FILE_PREFIX
+```
+from the shell.
 
 The IN_FILE_PREFIX is the prefix of the dsv files, e.g. "gre" for "gre_XXX.dsv".
 The OUT_FILE is the Pulseq output sequence file (default: "external.seq"). The reference voltage is the voltage the sequence was simulated with (default: 223.529007 V)
@@ -44,8 +48,11 @@ Note that the RF and gradient waveforms might be slightly different due to fixed
 ## Reconstruction of Pulseq data
 
 Data acquired with the converted Pulseq sequence can not be easily reconstructed, as the scan headers containing the meta information are missing.
-With the script: `dsv_to_pulseq.py #IN_FILE_1 #IN_FILE_2 -o #OUT_FILE` the data from the Pulseq sequence (IN_FILE_2) can be inserted into a raw data file acquired with the original sequence (IN_FILE_1).
-The merged output file can be used for rectrospective reconstruction at the scanner.
+The data from the Pulseq sequence (IN_FILE_2) can be inserted into a raw data file acquired with the original sequence (IN_FILE_1) using twixtools (see dependencies). If twixtools is installed, the following command will insert the data:
+```
+    dsv_to_pulseq.py #IN_FILE_1 #IN_FILE_2 -o #OUT_FILE
+```
+The merged output file (#OUT_FILE) can be used for rectrospective reconstruction at the scanner.
 
 ## References
 
