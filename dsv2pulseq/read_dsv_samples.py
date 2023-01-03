@@ -27,8 +27,8 @@ class DSVFile:
         All other values are deltas to the preceeding value.
         (This way it is possible to compress linear slopes.)
         """
-        ndsv = np.zeros((int(self.definitions.samples)), dtype=np.int)
-        dsv = np.array(self.values, dtype=np.int)
+        ndsv = np.zeros((int(self.definitions.samples)), dtype=int)
+        dsv = np.array(self.values, dtype=int)
         count = 0
         ncount = 1
         ndsv[ncount] = dsv[count]

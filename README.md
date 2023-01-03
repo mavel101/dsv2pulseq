@@ -8,6 +8,7 @@ RF values might be differing slightly compared to the original sequence, as the 
 
 A Python environment with the dependencies can be installed with the provided yml file: `conda env create -f dsv2pulseq.yml`.
 Afterwards run: `pip install .`.  
+Unittests can be run with `python -m unittest discover test/`. This includes testing, whether the conversion is successful for each dsv dataset in the folder "test/test_data".
 
 This package only depends on numpy and a slightly modified version of PyPulseq [1], which is added as a submodule.
 
