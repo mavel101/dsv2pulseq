@@ -200,7 +200,7 @@ class Sequence():
                                 pp_dur = int(np.round(pp.calc_duration(pp_event) / self.cf_time))
                                 if pp_dur > int(ts) - ts_offset:
                                     if hasattr(pp_event, 'waveform') or hasattr(pp_event, 'amplitude'):
-                                        split_pt = int(np.round((pp_dur - (int(ts) - ts_offset)) * self.cf_time/self.grad_raster))
+                                        split_pt = int(np.round((pp_dur - (int(ts) - ts_offset)) / self.delta['grad']))
                                         g_wf = waveform_from_seqblock(pp_event)
                                         g_new = pp.make_arbitrary_grad(channel=pp_event.channel, waveform=g_wf[:split_pt], delay=pp_event.delay, system=system)
                                         pp_events_tmp.append(pp.make_arbitrary_grad(channel=pp_event.channel, waveform=g_wf[split_pt:], delay=0, system=system))
