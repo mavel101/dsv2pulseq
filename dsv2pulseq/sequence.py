@@ -222,7 +222,11 @@ class Sequence():
                                     elif event.type[0] == 'g':
                                         g_conc = self.__make_pp_grad(event, event_del, system)
                                         if g_conc is not None:
-                                            pp_events[event_check[event.type]-1] = pp.add_gradients([pp_event, g_conc], system=system)
+                                            g_wf = [waveform_from_seqblock(pp_event), waveform_from_seqblock(g_conc)]
+                                            len_wf = max([len(wf) for wf in g_wf])
+                                            g_wf = [np.concatenate([wf, np.zeros(len_wf-len(wf))]) for wf in g_wf]
+                                            g_wf = g_wf[0] + g_wf[1]
+                                            pp_events[event_check[event.type]-1] = pp.make_arbitrary_grad(channel=event.channel, waveform=g_wf, system=system)
                                         concat_g[event.type] = True
                                     else:
                                         raise ValueError("Did not recognize event to be concatenated.")                                        
@@ -240,6 +244,7 @@ class Sequence():
                     if event.type == 'rf':
                         rf = self.__make_pp_rf(event, event_del, system)
                         pp_events.append(rf)
+                        event_check[event.type] = len(pp_events)
                         event_dur = event_del + event.duration
                     elif (event.type == 'gx' or event.type == 'gy' or event.type == 'gz'):
                         if concat_g[event.type]:
@@ -248,6 +253,7 @@ class Sequence():
                             g = self.__make_pp_grad(event, event_del, system)
                             if g is not None:
                                 pp_events.append(g)
+                                event_check[event.type] = len(pp_events)
                                 event_dur = event_del + event.duration 
                                 if hasattr(g, 'fall_time'):
                                     event_dur += event.ramp_dn
@@ -255,34 +261,26 @@ class Sequence():
                         adc_dur = round_up_to_raster(event.duration*self.cf_time, 6)
                         adc_del = round_up_to_raster(event_del*self.cf_time, 6)
                         adc = pp.make_adc(num_samples=event.samples, duration=adc_dur, delay=adc_del, freq_offset=event.freq, phase_offset=np.deg2rad(event.phase), system=system)
-                        event_dur = event_del + event.duration
                         pp_events.append(adc)
+                        event_check[event.type] = len(pp_events)
+                        event_dur = event_del + event.duration
                     elif event.type == 'trig':
+                        trig_dur = round_up_to_raster(event.duration*self.cf_time, 6)
+                        trig_del = round_up_to_raster(event_del*self.cf_time, 6)
                         if event.trig_type in self.trig_types:
-                            trig_dur = round_up_to_raster(event.duration*self.cf_time, 6)
-                            trig_del = round_up_to_raster(event_del*self.cf_time, 6)
                             trig = pp.make_digital_output_pulse(channel=self.trig_types[event.trig_type], duration=trig_dur, delay=trig_del, system=system)
                             pp_events.append(trig)
+                            event_check[event.type] = len(pp_events)
                             event_dur = event_del + event.duration
                         else:
-                            print(event.trig_type)
-                            print(f'Unknown trigger type in block with index {block.block_idx}.')
-
-                    # save position of event in list
-                    event_check[event.type] = len(pp_events)
+                            pp_events.append(pp.make_delay(d=trig_dur+trig_del))
+                            print(f'Unknown trigger type {event.trig_type} in block {block.block_idx} at time stamp {ts}. Replace with delay.')                 
 
                 # add possible delay at end of Siemens block
                 if k == len(block.timestamps)-1 and len(events) == 0:                       
-                    ts2 = list(block.timestamps.keys())
-                    if len(ts2) == 1:
-                        last_ts = 0
-                    else:
-                        last_ts = int(ts2[-2])
-                    block_delay = round_up_to_raster((last_ts - ts_offset) * self.cf_time, 5) # current block length
-                    block_delay += round_up_to_raster((int(ts2[-1]) - last_ts) * self.cf_time, 5) # additional delay
-                    delay = pp.make_delay(d=block_delay)
-                    pp_events.append(delay)
-                
+                    block_delay = round_up_to_raster((int(ts) - ts_offset) * self.cf_time, 5)
+                    pp_events.append(pp.make_delay(d=block_delay))
+
             pp_seq.add_block(*pp_events)
 
         pp_seq.write(filename)
