@@ -157,7 +157,7 @@ class Sequence():
         else:
             return None
 
-    def write_pulseq(self, filename, ref_volt=223.529007):
+    def write_pulseq(self, filename):
         """
         Create a Pulseq file from the sequence object.
         filename: Pulseq output filename
@@ -174,12 +174,14 @@ class Sequence():
 
         pp_seq = pp.Sequence(system=system)
         pp_seq.set_definition('Name', os.path.basename(filename))
-        for block in self.block_list:
-            # track objects and duration
-            # time tracking is always done in us, as these are integers, time is only converted to [s], when creating a pulseq event
-            pp_events = []
-            event_check = {'rf': 0, 'gx': 0, 'gy': 0, 'gz': 0, 'adc': 0, 'trig': 0}
-            ts_offset = 0
+
+        # track objects and duration
+        # time tracking is always done in [us] (integers), time is only converted to [s], when creating a pulseq event
+        event_check = {'rf': 0, 'gx': 0, 'gy': 0, 'gz': 0, 'adc': 0, 'trig': 0}
+        pp_events = []
+        for ix, block in enumerate(self.block_list):
+            block_offset = (self.block_list[ix-1].block_duration - ts_offset) if ix > 0 else 0 # offset time if Pulseq block crosses border of Siemens blocks
+            ts_offset = 0 # offset time if Siemens block is splitted
             for k,ts in enumerate(block.timestamps):
                 events = block.timestamps[ts]
                 concat_g = {'gx': False, 'gy': False, 'gz': False} # helper variable for gradient concatenation
@@ -187,7 +189,7 @@ class Sequence():
                 # Check if the block has to be splitted (Pulseq only allows one event per channel per block)
                 if any(event_check[event.type] for event in events):
                     # check if events in the current block cross the split point (and have to be splitted or concatenated themselves)
-                    split = any((int(np.round(pp.calc_duration(pp_event) / self.cf_time)) > int(ts) - ts_offset) for pp_event in pp_events)
+                    split = any((int(np.round(pp.calc_duration(pp_event) / self.cf_time)) > block_offset + int(ts) - ts_offset) for pp_event in pp_events)
                     if split:
                         # If there is a 2nd ADC or RF object in the block, the gradients have to be splitted,
                         # as ADC and RF objects can not be concatenated
@@ -198,9 +200,9 @@ class Sequence():
                             pp_events_tmp = []
                             for pp_event in pp_events:
                                 pp_dur = int(np.round(pp.calc_duration(pp_event) / self.cf_time))
-                                if pp_dur > int(ts) - ts_offset:
+                                if pp_dur > block_offset + int(ts) - ts_offset:
                                     if hasattr(pp_event, 'waveform') or hasattr(pp_event, 'amplitude'):
-                                        split_pt = int(np.round((pp_dur - (int(ts) - ts_offset)) / self.delta['grad']))
+                                        split_pt = int(np.round((pp_dur - (block_offset + int(ts) - ts_offset)) / self.delta['grad']))
                                         g_wf = waveform_from_seqblock(pp_event)
                                         g_new = pp.make_arbitrary_grad(channel=pp_event.channel, waveform=g_wf[:split_pt], delay=pp_event.delay, system=system)
                                         pp_events_tmp.append(pp.make_arbitrary_grad(channel=pp_event.channel, waveform=g_wf[split_pt:], delay=0, system=system))
@@ -210,12 +212,13 @@ class Sequence():
                             pp_seq.add_block(*pp_events)
                             pp_events = pp_events_tmp
                             ts_offset = int(ts)
+                            block_offset = 0
                             event_check = event_check.fromkeys(event_check,0)
                         else:
                             # If there is no 2nd ADC or RF in the block, we can just concatenate the gradients (which is easier)
                             for event in events:
                                 if event_check[event.type]:
-                                    event_del = event.delay - ts_offset
+                                    event_del = block_offset + event.delay - ts_offset
                                     pp_event = pp_events[event_check[event.type]-1] # find the existing gradient of the same channel
                                     if event.type == 'trig':
                                         raise ValueError(f"Trigger event in block with index {block.block_idx} can not be concatenated. This version only supports concatenation of gradients.")
@@ -232,15 +235,16 @@ class Sequence():
                                         raise ValueError("Did not recognize event to be concatenated.")                                        
                     else:
                         # no splitting or concatenation of gradients necessary, just start a new block
-                        pp_events.append(pp.make_delay(round_up_to_raster((int(ts)-ts_offset)*self.cf_time, 5))) # account for possible delay
+                        pp_events.append(pp.make_delay(round_up_to_raster((block_offset+int(ts)-ts_offset)*self.cf_time, 5))) # account for possible delay
                         pp_seq.add_block(*pp_events)
                         pp_events = []
                         ts_offset = int(ts)
+                        block_offset = 0
                         event_check = event_check.fromkeys(event_check,0)
 
                 # add events to the block
                 for event in events:
-                    event_del = event.delay - ts_offset
+                    event_del = block_offset + event.delay - ts_offset
                     if event.type == 'rf':
                         rf = self.__make_pp_rf(event, event_del, system)
                         pp_events.append(rf)
@@ -278,10 +282,10 @@ class Sequence():
 
                 # add possible delay at end of Siemens block
                 if k == len(block.timestamps)-1 and len(events) == 0:                       
-                    block_delay = round_up_to_raster((int(ts) - ts_offset) * self.cf_time, 5)
+                    block_delay = round_up_to_raster((block_offset + int(ts) - ts_offset) * self.cf_time, 5)
                     pp_events.append(pp.make_delay(d=block_delay))
 
-            pp_seq.add_block(*pp_events)
+        pp_seq.add_block(*pp_events)
 
         pp_seq.write(filename)
         end_time = time.time()
