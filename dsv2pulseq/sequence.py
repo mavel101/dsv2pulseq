@@ -124,7 +124,7 @@ class Sequence():
         # trigger types
         self.trig_types = {'EXTRIG0': 'ext1', 'OSC0': 'osc0', 'OSC1': 'osc1'}
 
-        # coil lead & hold times - WIP: read from input if there is an input
+        # coil lead & hold times
         self.rf_lead_time = 100 # [us]
         self.rf_hold_time = 30 # [us]
 
@@ -160,6 +160,13 @@ class Sequence():
             return self.gz_val[event.shp_ix]
         else:
             return None
+        
+    def set_lead_hold(self, rf_lead, rf_hold):
+        """
+        Set RF lead and hold times
+        """
+        self.rf_lead_time = rf_lead
+        self.rf_hold_time = rf_hold
 
     def write_pulseq(self, filename):
         """
@@ -197,7 +204,8 @@ class Sequence():
                 if any(event_check[event.type] for event in events):
                     # check if events in the current block cross the split point (and have to be splitted or concatenated themselves)
                     split = any((int(np.round(pp.calc_duration(pp_event) / self.cf_time)) > pulseq_time) for pp_event in pp_events)
-                    if split:
+                    check_trig = any(event.type=='trig' for event in events) # triggers can not be splitted or concatenated
+                    if split and not check_trig:
                         # If there is a 2nd ADC or RF object in the block, the gradients have to be splitted,
                         # as ADC and RF objects can not be concatenated
                         check_adc = any(event.type=='adc' for event in events) and event_check['adc']
@@ -224,7 +232,7 @@ class Sequence():
                             pp_seq.add_block(*pp_events)
                             pp_events = pp_events_tmp.copy()
                             if check_adc:
-                                ts_offset = int(ts) # WIP: Account for rounding to grad raster time of split_pt
+                                ts_offset = int(int(ts) / self.delta['grad']) * self.delta['grad']
                             elif check_rf:
                                 ts_offset = int(ts)-self.rf_lead_time-self.rf_hold_time
                         else:
@@ -247,9 +255,10 @@ class Sequence():
                                     else:
                                         raise ValueError("Did not recognize event to be concatenated.")                                        
                     else:
-                        # no splitting or concatenation of gradients necessary, just start a new block
-                        # WIP: Diesen else Block löschen und stattdessen in diesen Fällen immer concatenation machen
-                        pp_events.append(pp.make_delay(round_up_to_raster((int(ts)-ts_offset)*self.cf_time, 5))) # account for possible delay
+                        # start a new block
+                        delay = round_up_to_raster((int(ts)-ts_offset)*self.cf_time, 5)
+                        if self.__check_delay(pp_events, delay):
+                            pp_events.append(pp.make_delay(delay)) # account for possible delay
                         pp_seq.add_block(*pp_events)
                         pp_events = []
                         ts_offset = int(ts)
@@ -259,11 +268,15 @@ class Sequence():
                 for event in events:
                     event_del = event.delay - ts_offset
                     if event.type == 'rf':
-                        if event_del > self.rf_lead_time:
+                        if event_del < self.rf_lead_time:
                             raise ValueError(f"RF lead time violation in block with index {block.block_idx}")
                         rf = self.__make_pp_rf(event, event_del, system)
                         pp_events.append(rf)
                         event_check[event.type] = len(pp_events)
+                        # account for RF hold time
+                        delay = pp.calc_duration(rf) + self.rf_hold_time * self.cf_time
+                        if self.__check_delay(pp_events, delay):
+                            pp_events.append(pp.make_delay(delay))
                     elif (event.type == 'gx' or event.type == 'gy' or event.type == 'gz'):
                         if concat_g[event.type]:
                             concat_g[event.type] = False
@@ -286,11 +299,15 @@ class Sequence():
                             pp_events.append(trig)
                             event_check[event.type] = len(pp_events)
                         else:
-                            pp_events.append(pp.make_delay(d=trig_dur+trig_del))
+                            delay = trig_dur+trig_del
+                            if self.__check_delay(pp_events, delay):
+                                pp_events.append(pp.make_delay(d=delay))
                             print(f'Unknown trigger type {event.trig_type} in block {block.block_idx} at time stamp {ts}. Replace with delay.')                 
 
         # add last block
-        pp_events.append(pp.make_delay(round_up_to_raster((int(ts)-ts_offset)*self.cf_time, 5))) # account for possible delay in last block
+        delay = round_up_to_raster((int(ts)-ts_offset)*self.cf_time, 5)
+        if self.__check_delay(pp_events, delay):
+            pp_events.append(pp.make_delay(delay)) # account for possible delay in last block
         pp_seq.add_block(*pp_events)
 
         # write sequence
@@ -329,3 +346,13 @@ class Sequence():
             # arbitrary
             g_wf = self.get_shape(grad_event)
             return pp.make_arbitrary_grad(channel=grad_event.channel, waveform=g_wf*self.cf_grad, delay=event_del*self.cf_time, system=system)
+
+    def __check_delay(self, pp_events, delay):
+        """
+        Check if delay is the longest delay in the current event block
+        """
+        delays = [item.delay for item in pp_events if item.type == "delay"] + [0]
+        if delay > max(delays):
+            return True
+        else:
+            return False
