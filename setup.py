@@ -16,7 +16,7 @@ setup(name='dsv2pulseq',
       license='MIT License',
       packages=['dsv2pulseq'],
       scripts=['dsv2pulseq/dsv_to_pulseq.py', 'dsv2pulseq/insert_twix_data.py'],
-      dependencies = ['numpy', 'matplotlib'],
+      install_requires = ['numpy', 'matplotlib'],
       zip_safe=False,
       test_suite="test",
       )
