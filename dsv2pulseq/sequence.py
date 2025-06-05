@@ -221,7 +221,7 @@ class Sequence():
                                     split_pt = int((pulseq_time-self.rf_lead_time-self.rf_hold_time) / self.delta['grad'])
                                 if pp_dur > pulseq_time:
                                     if hasattr(pp_event, 'waveform') or hasattr(pp_event, 'amplitude'):
-                                        g_wf = waveform_from_seqblock(pp_event)
+                                        g_wf = waveform_from_seqblock(pp_event, system=system)
                                         g_new = pp.make_arbitrary_grad(channel=pp_event.channel, waveform=g_wf[:split_pt], delay=pp_event.delay, system=system)
                                         pp_events_tmp.append(pp.make_arbitrary_grad(channel=pp_event.channel, waveform=g_wf[split_pt:], delay=0, system=system))
                                         pp_events[i] = g_new
@@ -245,7 +245,7 @@ class Sequence():
                                     elif event.type[0] == 'g':
                                         g_conc = self.__make_pp_grad(event, event_del, system)
                                         if g_conc is not None:
-                                            g_wf = [waveform_from_seqblock(pp_event), waveform_from_seqblock(g_conc)]
+                                            g_wf = [waveform_from_seqblock(pp_event, system=system), waveform_from_seqblock(g_conc, system=system)]
                                             len_wf = max([len(wf) for wf in g_wf])
                                             g_wf = [np.concatenate([wf, np.zeros(len_wf-len(wf))]) for wf in g_wf]
                                             g_wf = g_wf[0] + g_wf[1]

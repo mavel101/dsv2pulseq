@@ -4,13 +4,11 @@ Helper functions
 
 import numpy as np
 from pypulseq.Sequence.sequence import Sequence
-from pypulseq.make_delay import make_delay
 
 def waveform_from_seqblock(seq_block, system=None):
     """
     extracts gradient waveform from Pypulseq sequence block
     """
-    from pypulseq.Sequence.sequence import Sequence
 
     if system==None:
         grad_raster_time = 10e-6
