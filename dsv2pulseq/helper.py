@@ -6,10 +6,16 @@ import numpy as np
 from pypulseq.Sequence.sequence import Sequence
 from pypulseq.make_delay import make_delay
 
-def waveform_from_seqblock(seq_block):
+def waveform_from_seqblock(seq_block, system=None):
     """
     extracts gradient waveform from Pypulseq sequence block
     """
+    from pypulseq.Sequence.sequence import Sequence
+
+    if system==None:
+        grad_raster_time = 10e-6
+    else:
+        grad_raster_time = system.grad_raster_time
 
     if seq_block.channel == 'x':
         axis = 0
@@ -20,9 +26,10 @@ def waveform_from_seqblock(seq_block):
     else:
         raise ValueError('No valid gradient waveform')
     dummy_seq = Sequence() # helper dummy sequence
-    dummy_seq.add_block(make_delay(d=1e-3)) # dummy delay to allow gradients starting at a nonzero value
     dummy_seq.add_block(seq_block)
-    return dummy_seq.gradient_waveforms()[axis,100:-1] # last value is a zero that does not belong to the waveform
+    dur = round(sum(dummy_seq.block_durations.values()), int(1/grad_raster_time))
+    tvec = np.arange(grad_raster_time/2, dur, grad_raster_time)
+    return dummy_seq.get_gradients()[axis](tvec)
 
 def round_up_to_raster(number, decimals=0):
     """

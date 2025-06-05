@@ -117,7 +117,6 @@ class Sequence():
         self.cf_grad = -1* 1e-3*self.gamma # [mT/m] -> [Hz/m], the "-1" is to be compatible to the "XYZ in TRA" mode of Pulseq
 
         # ref_volt is voltage for 1ms 180 deg rectangular pulse
-        # pi[rad]/1[ms] = pi[rad]*1000[Hz] = 500[Hz] equals the reference voltage
         # -> pulse [Hz] = pulse[V]/ref_volt[V] * 500[Hz]
         self.cf_rf = 5e2 / ref_volt # [V] -> [Hz]
 

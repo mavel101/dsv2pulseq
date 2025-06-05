@@ -1,12 +1,12 @@
 name: dsv2pulseq
 channels:
-    - defaults
+    - conda-forge
 dependencies:
     - python=3.10
     - pip
     - numpy
     - matplotlib
     - pip:
-        - git+https://github.com/mavel101/pypulseq@dsv2pulseq
+        - pypulseq==1.4.2.post1
         - git+https://github.com/pehses/twixtools
         - git+https://github.com/mavel101/dsv2pulseq
