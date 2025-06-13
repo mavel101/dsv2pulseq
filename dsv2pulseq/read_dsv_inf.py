@@ -57,7 +57,8 @@ def read_dsv_inf(file, seq):
                     adc_str = line[ix[4]+1:ix[5]].strip()
                     adc_samples = float(adc_str[adc_str.rfind(':')+1:adc_str.rfind('/')].strip())
                     adc_dur = float(adc_str[adc_str.rfind('/')+1:].strip())
-                    block.add_adc(adc_dur, adc_samples, ts)
+                    if "VOP_READOUT" not in adc_str: # pTx RX events during RFs are not ADCs
+                        block.add_adc(adc_dur, adc_samples, ts)
                 if line[ix[5]+1:ix[6]].strip():
                     gy_str = line[ix[5]+1:ix[6]].strip()
                     gy_ix = find_char(gy_str, '/')
