@@ -6,7 +6,7 @@ This code is copied from the dsvreader from Markus Boland.
 import numpy as np
 import codecs
 from collections import namedtuple
-
+from warnings import warn
 
 class DSVFile:
     """
@@ -109,7 +109,7 @@ class DSVFile:
                     setattr(self, line, list())
                     curkey = line
                 else:
-                    print('Unknown key {0} ... skipping.'.format(line))
+                    warn(f'Unknown key {line} in DSV file {filename}... skipping.')
             # Key value pair
             elif line.find('=') > 0:
                 key, val = line.split('=')

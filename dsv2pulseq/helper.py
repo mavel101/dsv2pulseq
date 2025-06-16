@@ -3,6 +3,7 @@ Helper functions
 """
 
 import numpy as np
+import math
 
 def trapezoid(amplitude, rise_time, flat_time, fall_time, dt=1e-5):
     # Time segments
@@ -34,9 +35,22 @@ def waveform_from_seqblock(grad, system=None):
 
     return waveform
 
-def round_up_to_raster(number, decimals=0):
+def round_up_to_raster(number, decimals=5, tol=1e-10):
     """
-    round number up to a specific number of decimal places.
+    Round number up to a specific number of decimal places.
+    Rounds up only if the digit beyond the desired precision exceeds a tolerance.
+    This avoids rounding up for tiny floating point errors.
+    
+    Parameters:
+    - number: float, the value to round
+    - decimals: int, number of decimal places
+    - tol: float, minimum excess to consider as real (not floating point noise)
     """
     multiplier = 10 ** decimals
-    return np.ceil(number * multiplier) / multiplier
+    scaled = number * multiplier
+    rounded = math.floor(scaled)
+
+    if scaled - rounded > tol:
+        rounded += 1
+
+    return rounded / multiplier

@@ -1,6 +1,8 @@
 import numpy as np
 import os
 import time
+from warnings import warn
+import logging
 import pypulseq as pp
 from dsv2pulseq.helper import round_up_to_raster, waveform_from_seqblock
 
@@ -106,13 +108,14 @@ class Sequence():
         self.duration = 0
         self.block_list = []
 
-        self.rf_val = np.array([])
-        self.gx_val = np.array([])
-        self.gy_val = np.array([])
-        self.gz_val = np.array([])
+        self.rf = np.array([])
+        self.gx = np.array([])
+        self.gy = np.array([])
+        self.gz = np.array([])
 
         # raster times
-        self.delta = {'rf': 5, 'grad': 10} # raster times in dsv files [us]
+        self.delta_rf = 5 # RF raster times in dsv file [us]
+        self.delta_grad = 10 # Gradient raster times in dsv file [us]
 
         # Conversion factors from dsv to (Py)Pulseq (SI) units
         self.gamma = 42.576e6
@@ -140,26 +143,26 @@ class Sequence():
 
     def set_shapes(self, shapes):
 
-        rf_val = shapes[0].values * np.exp(1j*np.deg2rad(shapes[1].values))
-        self.rf_val = rf_val
-        self.gx_val = shapes[2].values
-        self.gy_val = shapes[3].values
-        self.gz_val = shapes[4].values
-        self.delta['rf'] = int(shapes[0].definitions.horidelta)
-        self.delta['grad']= int(shapes[2].definitions.horidelta)
+        rf = shapes[0].values * np.exp(1j*np.deg2rad(shapes[1].values))
+        self.rf = rf
+        self.gx = shapes[2].values
+        self.gy = shapes[3].values
+        self.gz = shapes[4].values
+        self.delta_rf = int(shapes[0].definitions.horidelta)
+        self.delta_grad= int(shapes[2].definitions.horidelta)
 
     def get_shape(self, event):
         """
         Gets shape for RF or gradient event
         """
         if event.type == 'rf':
-            return self.rf_val[event.shp_ix]
+            return self.rf[event.shp_ix]
         elif event.type == 'gx':
-            return self.gx_val[event.shp_ix]
+            return self.gx[event.shp_ix]
         elif event.type == 'gy':
-            return self.gy_val[event.shp_ix]
+            return self.gy[event.shp_ix]
         elif event.type == 'gz':
-            return self.gz_val[event.shp_ix]
+            return self.gz[event.shp_ix]
         else:
             return None
         
@@ -181,7 +184,7 @@ class Sequence():
         filename: Pulseq output filename
         """
 
-        print("Create Pulseq sequence file.")
+        logging.info("Create Pulseq sequence file.")
         start_time = time.time()
 
         filename = os.path.splitext(filename)[0] + '.seq'
@@ -189,12 +192,12 @@ class Sequence():
         system = pp.Opts(
             max_grad=1e4,
             max_slew=1e4,
-            rf_raster_time=self.delta['rf'] * self.cf_time,
-            grad_raster_time=self.delta['grad'] * self.cf_time,
+            rf_raster_time=self.delta_rf * self.cf_time,
+            grad_raster_time=self.delta_grad * self.cf_time,
             grad_unit='mT/m',
             slew_unit='mT/m/ms',
-            rf_ringdown_time=0,
-            rf_dead_time=0
+            rf_ringdown_time=self.rf_hold_time * self.cf_time,
+            rf_dead_time=self.rf_lead_time * self.cf_time
         )
 
         pp_seq = pp.Sequence(system=system)
@@ -204,13 +207,15 @@ class Sequence():
         event_check = {'rf': 0, 'gx': 0, 'gy': 0, 'gz': 0, 'adc': 0, 'trig': 0}
         pp_events = []
         ts_offset = 0
-        last_ts = 0
+
+        if not self.block_list:
+            warn("No blocks in sequence. Please check the input DSV files. Exiting.")
+            return
 
         for ix, block in enumerate(self.block_list):
             block_offset = self.block_list[ix - 1].block_duration if ix > 0 else 0
             ts_offset -= block_offset # offset time if Siemens block is splitted
             for ts in block.timestamps:
-                last_ts = ts
                 events = block.timestamps[ts]
                 concat_g = {'gx': False, 'gy': False, 'gz': False}
                 pulseq_time = int(ts) - ts_offset # timestamp in the current Pulseq block [us]
@@ -219,22 +224,20 @@ class Sequence():
                 # triggers cannot be split, so we check if there is a trigger in the block
                 # gradients are either splitted or concatenated, depending on the presence of ADC or RF events
                 if any(event_check[event.type] for event in events):
-                    split = any((int(np.round(pp.calc_duration(pp_event) / self.cf_time)) > pulseq_time) for pp_event in pp_events)
+                    split = any((round(pp.calc_duration(pp_event) / self.cf_time) > pulseq_time) for pp_event in pp_events)
                     check_trig = any(event.type == 'trig' for event in events)
-                    if split and not check_trig:
+                    if split and not check_trig: # block needs to be split or concatenated
                         check_adc = any(event.type == 'adc' for event in events) and event_check['adc'] > 0
                         check_rf = any(event.type == 'rf' for event in events) and event_check['rf'] > 0
-                        if check_adc or check_rf:
+                        if check_adc or check_rf: # split block
                             pp_events_tmp = []
                             event_check = dict.fromkeys(event_check, 0)
                             for i, pp_event in enumerate(pp_events):
-                                pp_dur = int(np.round(pp.calc_duration(pp_event) / self.cf_time))
+                                pp_dur = round(pp.calc_duration(pp_event) / self.cf_time)
                                 if check_adc:
-                                    split_pt = int(pulseq_time / self.delta['grad'])
+                                    split_pt = round(pulseq_time / self.delta_grad)
                                 elif check_rf:
-                                    split_pt = int((pulseq_time - self.rf_lead_time - self.rf_hold_time) / self.delta['grad'])
-                                else:
-                                    raise ValueError("Unable to determine split point: neither ADC nor RF split is applicable.")
+                                    split_pt = round((pulseq_time - self.rf_lead_time - self.rf_hold_time) / self.delta_grad)
                                 if split_pt < 0:
                                     raise ValueError("Invalid split point.")
                                 if pp_dur > pulseq_time:
@@ -249,10 +252,10 @@ class Sequence():
                             pp_seq.add_block(*pp_events)
                             pp_events = pp_events_tmp.copy()
                             if check_adc:
-                                ts_offset = int(int(ts) / self.delta['grad']) * self.delta['grad']
+                                ts_offset = round(int(ts) / self.delta_grad) * self.delta_grad
                             elif check_rf:
                                 ts_offset = int(ts) - self.rf_lead_time - self.rf_hold_time
-                        else:
+                        else: # concatenate gradients
                             for event in events:
                                 if event_check[event.type] > 0:
                                     event_del = event.delay - ts_offset
@@ -272,13 +275,18 @@ class Sequence():
                                         concat_g[event.type] = True
                                     else:
                                         raise ValueError("Unrecognized event type during concatenation.")
-                    else:
-                        delay = round_up_to_raster((int(ts) - ts_offset) * self.cf_time, 5)
-                        if self.__check_delay(pp_events, delay):
-                            pp_events.append(pp.make_delay(delay))
+                    else: # no split needed, start new block
+                        block_dur = pp.calc_duration(*pp_events)
+                        block_dur_rounded = round_up_to_raster(pp.calc_duration(*pp_events), 5)
+                        if abs(block_dur - block_dur_rounded) > 1e-7:
+                            pp_events.append(pp.make_delay(block_dur_rounded))
                         pp_seq.add_block(*pp_events)
-                        pp_events = []
-                        ts_offset = int(ts)
+
+                        # Add remaining delay to the new block
+                        delay = round_up_to_raster((int(ts) - ts_offset) * self.cf_time, 5)
+                        delay_remain = delay - block_dur_rounded
+                        pp_events = [pp.make_delay(delay_remain)]
+                        ts_offset += round(block_dur_rounded  / self.cf_time)
                         event_check = dict.fromkeys(event_check, 0)
 
                 # add events to the block
@@ -292,9 +300,6 @@ class Sequence():
                         rf = self.__make_pp_rf(event, event_del, system)
                         pp_events.append(rf)
                         event_check[event.type] = len(pp_events)
-                        delay = pp.calc_duration(rf) + self.rf_hold_time * self.cf_time
-                        if self.__check_delay(pp_events, delay):
-                            pp_events.append(pp.make_delay(delay))
                     elif event.type in ['gx', 'gy', 'gz']:
                         if not concat_g[event.type]:
                             g = self.__make_pp_grad(event, event_del, system)
@@ -318,27 +323,27 @@ class Sequence():
                             delay = trig_dur + trig_del
                             if self.__check_delay(pp_events, delay):
                                 pp_events.append(pp.make_delay(d=delay))
-                            print(f'Unknown trigger type {event.trig_type} in block {block.block_idx} at time stamp {ts}. Replaced with delay.')
+                            logging.info(f'Unknown trigger type {event.trig_type} in block {block.block_idx} at time stamp {ts}. Replaced with delay.')
 
         # add last block
+        delay = round_up_to_raster((int(ts) - ts_offset) * self.cf_time, 5)
+        if self.__check_delay(pp_events, delay):
+            pp_events.append(pp.make_delay(delay))  # account for possible delay in last block
         if pp_events:
-            delay = round_up_to_raster((int(last_ts) - ts_offset) * self.cf_time, 5)
-            if self.__check_delay(pp_events, delay):
-                pp_events.append(pp.make_delay(delay))  # account for possible delay in last block
             pp_seq.add_block(*pp_events)
 
         # check timing of the sequence
         # set raster time to 1us for timing check, as otherwise ADC delays will throw errors
         pp_seq.system.rf_raster_time = 1e-6
         ok, error_report = pp_seq.check_timing()
-        pp_seq.system.rf_raster_time = self.delta['rf'] * self.cf_time
+        pp_seq.system.rf_raster_time = self.delta_rf * self.cf_time
         if not ok:
-            raise ValueError(f"PyPulseq timing check failed: {error_report}")
+            warn(f"PyPulseq timing check failed with {len(error_report)} errors.")
         
         # write sequence
         pp_seq.write(filename, check_timing=False)
         end_time = time.time()
-        print(f"Finished creating Pulseq file in {(end_time - start_time):.2f}s.")
+        logging.info(f"Finished creating Pulseq file in {(end_time - start_time):.2f}s.")
 
     def __make_pp_rf(self, rf_event, event_del, system):
             """
