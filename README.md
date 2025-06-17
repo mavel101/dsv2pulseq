@@ -1,6 +1,6 @@
 # dsv2pulseq
 
-Create Pulseq sequence files from Siemens dsv simulation files. The converter was only tested with the VE line dsv file layout.
+Create Pulseq sequence files from Siemens dsv simulation files. The converter was only tested with VE/VX dsv file layouts.
 VB/VD files are not supported, as the simulator can not output RF phase data.  
 RF values might be differing slightly compared to the original sequence, as the dsv files contain RF values only on a 5us raster.
 
