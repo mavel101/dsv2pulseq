@@ -137,6 +137,9 @@ class Sequence():
         self.rf_lead_time = 100 # [us]
         self.rf_hold_time = 30 # [us]
 
+        # ADC dead time
+        self.adc_dead_time = 10 # [us]
+
     def add_block(self, idx, duration, start_time):
         self.n_blocks += 1
         self.duration = start_time + duration
@@ -170,12 +173,18 @@ class Sequence():
         else:
             return None
         
-    def set_lead_hold(self, rf_lead, rf_hold):
+    def set_lead_hold_time(self, rf_lead_time, rf_hold_time):
         """
         Set RF lead and hold times
         """
-        self.rf_lead_time = rf_lead
-        self.rf_hold_time = rf_hold
+        self.rf_lead_time = rf_lead_time
+        self.rf_hold_time = rf_hold_time
+
+    def set_adc_dead_time(self, adc_dead_time):
+        """
+        Set ADC dead time
+        """
+        self.adc_dead_time = adc_dead_time
 
     def write_pulseq(self, filename):
         """
@@ -201,7 +210,8 @@ class Sequence():
             grad_unit='mT/m',
             slew_unit='mT/m/ms',
             rf_ringdown_time=self.rf_hold_time * self.cf_time,
-            rf_dead_time=self.rf_lead_time * self.cf_time
+            rf_dead_time=self.rf_lead_time * self.cf_time,
+            adc_dead_time=self.adc_dead_time * self.cf_time
         )
 
         pp_seq = pp.Sequence(system=system)
@@ -214,7 +224,8 @@ class Sequence():
             warn("No blocks in sequence. Please check the input DSV files. Exiting.")
             return
 
-        block_list = self.shift_rf_timestamps()
+        # Shift RF and ADC timestamps to account for lead and dead times
+        block_list = self.shift_timestamps()
 
         for ix, block in enumerate(block_list):
             block_offset = block_list[ix - 1].block_duration if ix > 0 else 0
@@ -241,10 +252,9 @@ class Sequence():
                                 pp_dur = round(pp.calc_duration(pp_event) / self.cf_time)
                                 if pp_dur > pulseq_time:
                                     if hasattr(pp_event, 'waveform') or hasattr(pp_event, 'amplitude'):
-                                        g_wf = waveform_from_seqblock(pp_event, system=system)
-                                        g_new = pp.make_arbitrary_grad(channel=pp_event.channel, waveform=g_wf[:split_pt], delay=pp_event.delay, system=system)
-                                        pulseq_events_tmp[key] = pp.make_arbitrary_grad(channel=pp_event.channel, waveform=g_wf[split_pt:], delay=0, system=system)
-                                        pulseq_events[key] = g_new
+                                        g_pre, g_post = self.__split_gradients(pp_event, split_pt, system)
+                                        pulseq_events_tmp[key] = g_post
+                                        pulseq_events[key] = g_pre
                                     else:
                                         raise ValueError(f"Event with type {pp_event.type} in block with index {block.block_idx} cannot be split. Only gradients can be split.")
                             pp_seq.add_block(*extract_events(pulseq_events))
@@ -291,8 +301,6 @@ class Sequence():
                         raise ValueError("Negative event delay encountered.")
                     if event.type == 'rf':
                         event_del += self.rf_lead_time
-                        if event_del < self.rf_lead_time:
-                            raise ValueError(f"RF lead time violation in block with index {block.block_idx}")
                         rf = self.__make_pp_rf(event, event_del, system)
                         pulseq_events['rf'] = rf
                     elif event.type in ['gx', 'gy', 'gz']:
@@ -301,6 +309,7 @@ class Sequence():
                             if g is not None:
                                 pulseq_events[event.type] = g
                     elif event.type == 'adc':
+                        event_del += self.adc_dead_time
                         adc_dur = round_up_to_raster(event.duration * self.cf_time, 7) # ADCs can be on nanosecond raster
                         adc_del = round_up_to_raster(event_del * self.cf_time, 6)
                         adc = pp.make_adc(num_samples=event.samples, duration=adc_dur, delay=adc_del, freq_offset=event.freq, phase_offset=np.deg2rad(event.phase), system=system)
@@ -368,6 +377,46 @@ class Sequence():
             g_wf = self.get_shape(grad_event)
             return pp.make_arbitrary_grad(channel=grad_event.channel, waveform=g_wf*self.cf_grad, delay=event_del*self.cf_time, system=system)
 
+    def __split_gradients(self, grad_event, split_pt, system):
+        """
+        Split gradients at the split point.
+        """
+        def create_grad(wf, channel, system):
+            grad = pp.make_arbitrary_grad(channel=channel, waveform=wf, delay=0, system=system)
+            return grad
+
+        # Pypulseq throws an error if the waveform has only one point.
+        def fix_single_point_grad(wf, channel, system):
+            grad = pp.make_arbitrary_grad(
+                channel=channel,
+                waveform=np.concatenate([wf, np.zeros(1, dtype=float)]),
+                delay=0,
+                system=system
+            )
+            grad.waveform = wf
+            grad.tt = (np.arange(len(wf)) + 0.5) * system.grad_raster_time
+            grad.shape_dur = len(wf) * system.grad_raster_time
+            grad.first = wf[0]
+            grad.last = wf[0]
+            grad.area = np.sum(wf * system.grad_raster_time)
+            return grad
+
+        g_wf = waveform_from_seqblock(grad_event, system=system) # already contains delay
+        g_pre_wf = g_wf[:split_pt]
+        g_post_wf = g_wf[split_pt:]
+
+        if len(g_pre_wf) == 1:
+            g_pre = fix_single_point_grad(g_pre_wf, grad_event.channel, system)
+        else:
+            g_pre = create_grad(g_pre_wf, grad_event.channel, system)
+
+        if len(g_post_wf) == 1:
+            g_post = fix_single_point_grad(g_post_wf, grad_event.channel, system)
+        else:
+            g_post = create_grad(g_post_wf, grad_event.channel, system)
+
+        return g_pre, g_post
+
     def __check_delay(self, pulseq_events, delay):
         """
         Check if delay is the longest delay in the current event block
@@ -379,10 +428,10 @@ class Sequence():
         else:
             return False
         
-    def shift_rf_timestamps(self):
+    def shift_timestamps(self):
         """
-        Shift RF events by the RF lead time to make sure
-        it is not violated, when creating the Pulseq sequence.
+        Shift RF events by the RF lead time and ADC events by the ADC dead time
+        to make sure they are not violated, when creating the Pulseq sequence.
 
         Returns:
         --------
@@ -394,27 +443,32 @@ class Sequence():
         block_list_shifted = copy.deepcopy(self.block_list)
 
         for block in block_list_shifted:
-            new_timestamps = {}
+            shifted_timestamps = {}
 
             for ts_str in block.timestamps:
                 ts = int(ts_str)
                 events = block.timestamps[ts_str]
-                if not events and ts not in new_timestamps:
-                    new_timestamps[ts] = []
+                if not events and ts not in shifted_timestamps:
+                    shifted_timestamps[ts] = []
                 for event in events:
                     if event.type == 'rf':
                         new_ts = ts - self.rf_lead_time
-                        if new_ts not in new_timestamps:
-                            new_timestamps[new_ts] = []
-                        new_timestamps[new_ts].append(event)
+                        if new_ts not in shifted_timestamps:
+                            shifted_timestamps[new_ts] = []
+                        shifted_timestamps[new_ts].append(event)
+                    elif event.type == 'adc':
+                        new_ts = ts - self.adc_dead_time
+                        if new_ts not in shifted_timestamps:
+                            shifted_timestamps[new_ts] = []
+                        shifted_timestamps[new_ts].append(event)
                     else:
-                        if ts not in new_timestamps:
-                            new_timestamps[ts] = []
-                        new_timestamps[ts].append(event)
+                        if ts not in shifted_timestamps:
+                            shifted_timestamps[ts] = []
+                        shifted_timestamps[ts].append(event)
 
             # Sort timestamps and convert keys back to strings
             block.timestamps = dict(
-                sorted(((str(ts), evts) for ts, evts in new_timestamps.items()), key=lambda x: int(x[0]))
+                sorted(((str(ts), evts) for ts, evts in shifted_timestamps.items()), key=lambda x: int(x[0]))
             )
 
         return block_list_shifted
