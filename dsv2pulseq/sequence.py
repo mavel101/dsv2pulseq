@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import time
+import copy
 from warnings import warn
 import logging
 import pypulseq as pp
@@ -35,24 +36,24 @@ class Block():
         if not str(ts) in self.timestamps:
             self.timestamps[str(ts)] = []
 
-    def add_rf(self, duration, shp_ix, ts):
+    def add_rf(self, duration, shape_ix, ts):
         self.add_timestamp(ts)
-        rf = Rf(duration, shp_ix, ts)
+        rf = Rf(duration, shape_ix)
         self.timestamps[str(ts)].append(rf)
     
-    def add_grad(self, channel, amp, duration, ramp_up, ramp_dn, shp_ix, ts):
+    def add_grad(self, channel, amp, duration, ramp_up, ramp_dn, shape_ix, ts):
         self.add_timestamp(ts)
-        grad = Grad(channel, amp, duration, ramp_up, ramp_dn, shp_ix, ts)
+        grad = Grad(channel, amp, duration, ramp_up, ramp_dn, shape_ix)
         self.timestamps[str(ts)].append(grad)
 
     def add_adc(self, duration, samples, ts):
         self.add_timestamp(ts)
-        adc = Adc(duration, samples, ts)
+        adc = Adc(duration, samples)
         self.timestamps[str(ts)].append(adc)
 
     def add_trig(self, duration, trig_type, ts):
         self.add_timestamp(ts)
-        trig = Trig(duration, trig_type, ts)
+        trig = Trig(duration, trig_type)
         self.timestamps[str(ts)].append(trig)
 
     def set_freqphase(self, freq_phase, ts):
@@ -62,13 +63,12 @@ class Block():
 
 class Rf():
 
-    def __init__(self, duration, shp_ix, delay):
+    def __init__(self, duration, shape_ix):
         self.type = 'rf'
         self.duration = duration
-        self.delay = delay
         self.freq = 0
         self.phase = 0
-        self.shp_ix = shp_ix
+        self.shape_ix = shape_ix
 
     def set_freqphase(self, freq_phase):
         self.freq = freq_phase[0]
@@ -76,23 +76,21 @@ class Rf():
     
 class Grad():
 
-    def __init__(self, channel, amp, duration, ramp_up, ramp_dn, shp_ix, delay):
+    def __init__(self, channel, amp, duration, ramp_up, ramp_dn, shape_ix):
         self.type = 'g' + channel 
         self.channel = channel
         self.amp = amp
         self.duration = duration # flat_top + ramp_up
         self.ramp_up = ramp_up
         self.ramp_dn = ramp_dn
-        self.delay = delay
-        self.shp_ix = shp_ix
+        self.shape_ix = shape_ix
 
 class Adc():
 
-    def __init__(self, duration, samples, delay):
+    def __init__(self, duration, samples):
         self.type = 'adc'
         self.duration = duration
         self.samples = samples
-        self.delay = delay
         self.freq = 0
         self.phase = 0
 
@@ -102,10 +100,9 @@ class Adc():
 
 class Trig():
 
-    def __init__(self, duration, trig_type, delay):
+    def __init__(self, duration, trig_type):
         self.type = 'trig'
         self.duration = duration
-        self.delay = delay
         self.trig_type = trig_type
 
 class Sequence():
@@ -163,13 +160,13 @@ class Sequence():
         Gets shape for RF or gradient event
         """
         if event.type == 'rf':
-            return self.rf[event.shp_ix]
+            return self.rf[event.shape_ix]
         elif event.type == 'gx':
-            return self.gx[event.shp_ix]
+            return self.gx[event.shape_ix]
         elif event.type == 'gy':
-            return self.gy[event.shp_ix]
+            return self.gy[event.shape_ix]
         elif event.type == 'gz':
-            return self.gz[event.shp_ix]
+            return self.gz[event.shape_ix]
         else:
             return None
         
@@ -217,8 +214,10 @@ class Sequence():
             warn("No blocks in sequence. Please check the input DSV files. Exiting.")
             return
 
-        for ix, block in enumerate(self.block_list):
-            block_offset = self.block_list[ix - 1].block_duration if ix > 0 else 0
+        block_list = self.shift_rf_timestamps()
+
+        for ix, block in enumerate(block_list):
+            block_offset = block_list[ix - 1].block_duration if ix > 0 else 0
             ts_offset -= block_offset # offset time if Siemens block is splitted
             for ts in block.timestamps:
                 events = block.timestamps[ts]
@@ -254,7 +253,7 @@ class Sequence():
                         else: # concatenate gradients
                             for event in events:
                                 if pulseq_events[event.type] is not None:
-                                    event_del = event.delay - ts_offset
+                                    event_del = int(ts) - ts_offset
                                     if event_del < 0:
                                         raise ValueError("Negative event delay encountered during concatenation.")
                                     pp_event = pulseq_events[event.type]
@@ -287,10 +286,11 @@ class Sequence():
 
                 # add events to the block
                 for event in events:
-                    event_del = event.delay - ts_offset
+                    event_del = int(ts) - ts_offset
                     if event_del < 0:
                         raise ValueError("Negative event delay encountered.")
                     if event.type == 'rf':
+                        event_del += self.rf_lead_time
                         if event_del < self.rf_lead_time:
                             raise ValueError(f"RF lead time violation in block with index {block.block_idx}")
                         rf = self.__make_pp_rf(event, event_del, system)
@@ -377,4 +377,44 @@ class Sequence():
         if delay > max(delays):
             return True
         else:
-            return False    
+            return False
+        
+    def shift_rf_timestamps(self):
+        """
+        Shift RF events by the RF lead time to make sure
+        it is not violated, when creating the Pulseq sequence.
+
+        Returns:
+        --------
+        A copy of self.block_list with 'rf' events shifted earlier by self.rf_lead_time.
+        The original self.block_list remains unchanged.
+        """
+        
+        # Deep copy to avoid modifying original blocks or event lists
+        block_list_shifted = copy.deepcopy(self.block_list)
+
+        for block in block_list_shifted:
+            new_timestamps = {}
+
+            for ts_str in block.timestamps:
+                ts = int(ts_str)
+                events = block.timestamps[ts_str]
+                if not events and ts not in new_timestamps:
+                    new_timestamps[ts] = []
+                for event in events:
+                    if event.type == 'rf':
+                        new_ts = ts - self.rf_lead_time
+                        if new_ts not in new_timestamps:
+                            new_timestamps[new_ts] = []
+                        new_timestamps[new_ts].append(event)
+                    else:
+                        if ts not in new_timestamps:
+                            new_timestamps[ts] = []
+                        new_timestamps[ts].append(event)
+
+            # Sort timestamps and convert keys back to strings
+            block.timestamps = dict(
+                sorted(((str(ts), evts) for ts, evts in new_timestamps.items()), key=lambda x: int(x[0]))
+            )
+
+        return block_list_shifted

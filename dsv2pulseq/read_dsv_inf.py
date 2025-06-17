@@ -47,8 +47,8 @@ def read_dsv_inf(file, seq):
                 if line[ix[1]+1:ix[2]].strip():
                     rf_str = line[ix[1]+1:ix[2]].strip()
                     rf_dur = int(rf_str[rf_str.rfind('/')+1:].strip())
-                    rf_shp_ix = slice((block.start_time+ts)//delta_rf, (block.start_time+ts+rf_dur)//delta_rf)
-                    block.add_rf(rf_dur, rf_shp_ix, ts)
+                    rf_shape_ix = slice((block.start_time+ts)//delta_rf, (block.start_time+ts+rf_dur)//delta_rf)
+                    block.add_rf(rf_dur, rf_shape_ix, ts)
                 if line[ix[2]+1:ix[3]].strip():
                     freqphase_str = line[ix[2]+1:ix[3]].strip()
                     freq = float(freqphase_str[freqphase_str.rfind(':')+1:freqphase_str.rfind('/')].strip())
@@ -67,8 +67,8 @@ def read_dsv_inf(file, seq):
                     gy_rut = int(gy_str[gy_ix[0]+1:gy_ix[1]].strip())
                     gy_dur = int(gy_str[gy_ix[1]+1:gy_ix[2]].strip())
                     gy_rdt = int(gy_str[gy_ix[2]+1:].strip())
-                    gy_shp_ix = slice((block.start_time+ts)//delta_grad, (block.start_time+ts+gy_dur+gy_rdt)//delta_grad)
-                    block.add_grad('y', gy_amp, gy_dur, gy_rut, gy_rdt, gy_shp_ix, ts)
+                    gy_shape_ix = slice((block.start_time+ts)//delta_grad, (block.start_time+ts+gy_dur+gy_rdt)//delta_grad)
+                    block.add_grad('y', gy_amp, gy_dur, gy_rut, gy_rdt, gy_shape_ix, ts)
                 if line[ix[6]+1:ix[7]].strip():
                     gx_str = line[ix[6]+1:ix[7]].strip()
                     gx_ix = find_char(gx_str, '/')
@@ -76,8 +76,8 @@ def read_dsv_inf(file, seq):
                     gx_rut = int(gx_str[gx_ix[0]+1:gx_ix[1]].strip())
                     gx_dur = int(gx_str[gx_ix[1]+1:gx_ix[2]].strip())
                     gx_rdt = int(gx_str[gx_ix[2]+1:].strip())
-                    gx_shp_ix = slice((block.start_time+ts)//delta_grad, (block.start_time+ts+gx_dur+gx_rdt)//delta_grad)
-                    block.add_grad('x', gx_amp, gx_dur, gx_rut, gx_rdt, gx_shp_ix, ts)
+                    gx_shape_ix = slice((block.start_time+ts)//delta_grad, (block.start_time+ts+gx_dur+gx_rdt)//delta_grad)
+                    block.add_grad('x', gx_amp, gx_dur, gx_rut, gx_rdt, gx_shape_ix, ts)
                 if line[ix[7]+1:ix[8]].strip():
                     gz_str = line[ix[7]+1:ix[8]].strip()
                     gz_ix = find_char(gz_str, '/')
@@ -85,8 +85,8 @@ def read_dsv_inf(file, seq):
                     gz_rut = int(gz_str[gz_ix[0]+1:gz_ix[1]].strip())
                     gz_dur = int(gz_str[gz_ix[1]+1:gz_ix[2]].strip())
                     gz_rdt = int(gz_str[gz_ix[2]+1:].strip())
-                    gz_shp_ix = slice((block.start_time+ts)//delta_grad, (block.start_time+ts+gz_dur+gz_rdt)//delta_grad)
-                    block.add_grad('z', gz_amp, gz_dur, gz_rut, gz_rdt, gz_shp_ix, ts)
+                    gz_shape_ix = slice((block.start_time+ts)//delta_grad, (block.start_time+ts+gz_dur+gz_rdt)//delta_grad)
+                    block.add_grad('z', gz_amp, gz_dur, gz_rut, gz_rdt, gz_shape_ix, ts)
                 if line[ix[8]+1:ix[9]].strip():
                     trig_str = line[ix[8]+1:ix[9]].strip()
                     trig_type = trig_str[trig_str.rfind(':')+1:trig_str.rfind('/')].strip()
