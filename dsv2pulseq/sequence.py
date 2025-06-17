@@ -6,6 +6,13 @@ import logging
 import pypulseq as pp
 from dsv2pulseq.helper import round_up_to_raster, waveform_from_seqblock
 
+
+def init_event_dict():
+    return {'rf': None, 'gx': None, 'gy': None, 'gz': None, 'adc': None, 'trig': None, 'delay': None}
+
+def extract_events(event_dict):
+    return [event for event in event_dict.values() if event is not None]
+
 class Block():
     """
     Event block in "Siemens style", allows more than one object per channel
@@ -203,9 +210,7 @@ class Sequence():
         pp_seq = pp.Sequence(system=system)
         pp_seq.set_definition('Name', os.path.basename(filename))
 
-
-        event_check = {'rf': 0, 'gx': 0, 'gy': 0, 'gz': 0, 'adc': 0, 'trig': 0}
-        pp_events = []
+        pulseq_events = init_event_dict()
         ts_offset = 0
 
         if not self.block_list:
@@ -221,47 +226,38 @@ class Sequence():
                 pulseq_time = int(ts) - ts_offset # timestamp in the current Pulseq block [us]
 
                 # Check if the block has to be split (Pulseq only allows one event per channel per block)
-                # triggers cannot be split, so we check if there is a trigger in the block
-                # gradients are either splitted or concatenated, depending on the presence of ADC or RF events
-                if any(event_check[event.type] for event in events):
-                    split = any((round(pp.calc_duration(pp_event) / self.cf_time) > pulseq_time) for pp_event in pp_events)
-                    check_trig = any(event.type == 'trig' for event in events)
-                    if split and not check_trig: # block needs to be split or concatenated
-                        check_adc = any(event.type == 'adc' for event in events) and event_check['adc'] > 0
-                        check_rf = any(event.type == 'rf' for event in events) and event_check['rf'] > 0
-                        if check_adc or check_rf: # split block
-                            pp_events_tmp = []
-                            event_check = dict.fromkeys(event_check, 0)
-                            for i, pp_event in enumerate(pp_events):
+                # Gradients are either splitted or concatenated, depending on the presence of ADC, RF or Trigger events
+                if any(pulseq_events[event.type] is not None for event in events):
+                    split = any((round(pp.calc_duration(pp_event) / self.cf_time) > pulseq_time) for pp_event in pulseq_events.values() if pp_event is not None)
+                    if split: # block needs to be split or concatenated
+                        check_adc = any(event.type == 'adc' for event in events) and pulseq_events['adc'] is not None
+                        check_rf = any(event.type == 'rf' for event in events) and pulseq_events['rf'] is not None
+                        check_trig = any(event.type == 'trig' for event in events) and pulseq_events['trig'] is not None
+                        split_pt = round(pulseq_time / self.delta_grad)
+                        if check_adc or check_rf or check_trig: # split block
+                            pulseq_events_tmp = init_event_dict()
+                            for key, pp_event in pulseq_events.items():
+                                if pp_event is None:
+                                    continue
                                 pp_dur = round(pp.calc_duration(pp_event) / self.cf_time)
-                                if check_adc:
-                                    split_pt = round(pulseq_time / self.delta_grad)
-                                elif check_rf:
-                                    split_pt = round((pulseq_time - self.rf_lead_time - self.rf_hold_time) / self.delta_grad)
-                                if split_pt < 0:
-                                    raise ValueError("Invalid split point.")
                                 if pp_dur > pulseq_time:
                                     if hasattr(pp_event, 'waveform') or hasattr(pp_event, 'amplitude'):
                                         g_wf = waveform_from_seqblock(pp_event, system=system)
                                         g_new = pp.make_arbitrary_grad(channel=pp_event.channel, waveform=g_wf[:split_pt], delay=pp_event.delay, system=system)
-                                        pp_events_tmp.append(pp.make_arbitrary_grad(channel=pp_event.channel, waveform=g_wf[split_pt:], delay=0, system=system))
-                                        pp_events[i] = g_new
-                                        event_check['g' + pp_event.channel] = 1
+                                        pulseq_events_tmp[key] = pp.make_arbitrary_grad(channel=pp_event.channel, waveform=g_wf[split_pt:], delay=0, system=system)
+                                        pulseq_events[key] = g_new
                                     else:
-                                        raise ValueError(f"ADC, RF or trigger event in block with index {block.block_idx} cannot be split. Only gradients are supported.")
-                            pp_seq.add_block(*pp_events)
-                            pp_events = pp_events_tmp.copy()
-                            if check_adc:
-                                ts_offset = round(int(ts) / self.delta_grad) * self.delta_grad
-                            elif check_rf:
-                                ts_offset = int(ts) - self.rf_lead_time - self.rf_hold_time
+                                        raise ValueError(f"Event with type {pp_event.type} in block with index {block.block_idx} cannot be split. Only gradients can be split.")
+                            pp_seq.add_block(*extract_events(pulseq_events))
+                            pulseq_events = pulseq_events_tmp.copy()
+                            ts_offset = round(int(ts) / self.delta_grad) * self.delta_grad
                         else: # concatenate gradients
                             for event in events:
-                                if event_check[event.type] > 0:
+                                if pulseq_events[event.type] is not None:
                                     event_del = event.delay - ts_offset
                                     if event_del < 0:
                                         raise ValueError("Negative event delay encountered during concatenation.")
-                                    pp_event = pp_events[event_check[event.type] - 1]
+                                    pp_event = pulseq_events[event.type]
                                     if event.type == 'trig':
                                         raise ValueError(f"Trigger event in block with index {block.block_idx} cannot be concatenated.")
                                     elif event.type[0] == 'g':
@@ -271,23 +267,23 @@ class Sequence():
                                             len_wf = max([len(wf) for wf in g_wf])
                                             g_wf = [np.concatenate([wf, np.zeros(len_wf - len(wf))]) for wf in g_wf]
                                             g_wf = g_wf[0] + g_wf[1]
-                                            pp_events[event_check[event.type] - 1] = pp.make_arbitrary_grad(channel=event.channel, waveform=g_wf, system=system)
+                                            pulseq_events[event.type] = pp.make_arbitrary_grad(channel=event.channel, waveform=g_wf, system=system)
                                         concat_g[event.type] = True
                                     else:
                                         raise ValueError("Unrecognized event type during concatenation.")
                     else: # no split needed, start new block
-                        block_dur = pp.calc_duration(*pp_events)
-                        block_dur_rounded = round_up_to_raster(pp.calc_duration(*pp_events), 5)
+                        block_dur = pp.calc_duration(*extract_events(pulseq_events))
+                        block_dur_rounded = round_up_to_raster(pp.calc_duration(*extract_events(pulseq_events)), 5)
                         if abs(block_dur - block_dur_rounded) > 1e-7:
-                            pp_events.append(pp.make_delay(block_dur_rounded))
-                        pp_seq.add_block(*pp_events)
+                            pulseq_events['delay'] = pp.make_delay(block_dur_rounded)
+                        pp_seq.add_block(*extract_events(pulseq_events))
 
                         # Add remaining delay to the new block
                         delay = round_up_to_raster((int(ts) - ts_offset) * self.cf_time, 5)
                         delay_remain = delay - block_dur_rounded
-                        pp_events = [pp.make_delay(delay_remain)]
+                        pulseq_events = init_event_dict()
+                        pulseq_events['delay'] = pp.make_delay(delay_remain)
                         ts_offset += round(block_dur_rounded  / self.cf_time)
-                        event_check = dict.fromkeys(event_check, 0)
 
                 # add events to the block
                 for event in events:
@@ -298,39 +294,35 @@ class Sequence():
                         if event_del < self.rf_lead_time:
                             raise ValueError(f"RF lead time violation in block with index {block.block_idx}")
                         rf = self.__make_pp_rf(event, event_del, system)
-                        pp_events.append(rf)
-                        event_check[event.type] = len(pp_events)
+                        pulseq_events['rf'] = rf
                     elif event.type in ['gx', 'gy', 'gz']:
                         if not concat_g[event.type]:
                             g = self.__make_pp_grad(event, event_del, system)
                             if g is not None:
-                                pp_events.append(g)
-                                event_check[event.type] = len(pp_events)
+                                pulseq_events[event.type] = g
                     elif event.type == 'adc':
                         adc_dur = round_up_to_raster(event.duration * self.cf_time, 7) # ADCs can be on nanosecond raster
                         adc_del = round_up_to_raster(event_del * self.cf_time, 6)
                         adc = pp.make_adc(num_samples=event.samples, duration=adc_dur, delay=adc_del, freq_offset=event.freq, phase_offset=np.deg2rad(event.phase), system=system)
-                        pp_events.append(adc)
-                        event_check[event.type] = len(pp_events)
+                        pulseq_events['adc'] = adc
                     elif event.type == 'trig':
                         trig_dur = round_up_to_raster(event.duration * self.cf_time, 6)
                         trig_del = round_up_to_raster(event_del * self.cf_time, 6)
                         if event.trig_type in self.trig_types:
                             trig = pp.make_digital_output_pulse(channel=self.trig_types[event.trig_type], duration=trig_dur, delay=trig_del, system=system)
-                            pp_events.append(trig)
-                            event_check[event.type] = len(pp_events)
+                            pulseq_events['trig'] = trig
                         else:
                             delay = trig_dur + trig_del
-                            if self.__check_delay(pp_events, delay):
-                                pp_events.append(pp.make_delay(d=delay))
+                            if self.__check_delay(pulseq_events, delay):
+                                pulseq_events['trig'] = pp.make_delay(d=delay)
                             logging.info(f'Unknown trigger type {event.trig_type} in block {block.block_idx} at time stamp {ts}. Replaced with delay.')
 
         # add last block
         delay = round_up_to_raster((int(ts) - ts_offset) * self.cf_time, 5)
-        if self.__check_delay(pp_events, delay):
-            pp_events.append(pp.make_delay(delay))  # account for possible delay in last block
-        if pp_events:
-            pp_seq.add_block(*pp_events)
+        if self.__check_delay(pulseq_events, delay):
+            pulseq_events['delay'] = pp.make_delay(delay)  # account for possible delay in last block
+        if any(pulseq_events.values()):
+            pp_seq.add_block(*extract_events(pulseq_events))
 
         # check timing of the sequence
         # set raster time to 1us for timing check, as otherwise ADC delays will throw errors
@@ -376,12 +368,13 @@ class Sequence():
             g_wf = self.get_shape(grad_event)
             return pp.make_arbitrary_grad(channel=grad_event.channel, waveform=g_wf*self.cf_grad, delay=event_del*self.cf_time, system=system)
 
-    def __check_delay(self, pp_events, delay):
+    def __check_delay(self, pulseq_events, delay):
         """
         Check if delay is the longest delay in the current event block
         """
-        delays = [item.delay for item in pp_events if item.type == "delay"] + [0]
+        pulseq_events = extract_events(pulseq_events)
+        delays = [item.delay for item in pulseq_events if (item.type == "delay" and item is not None)] + [0]
         if delay > max(delays):
             return True
         else:
-            return False
+            return False    
