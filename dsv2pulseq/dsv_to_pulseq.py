@@ -21,7 +21,7 @@ def main(args):
     seq = read_dsv(args.in_file_prefix, args.ref_volt, plot=False)
     seq.set_lead_hold_time(args.lead_time, args.hold_time)
     seq.set_adc_dead_time(args.adc_dead_time)
-    seq.write_pulseq(args.out_file)
+    seq.make_pulseq_sequence(args.out_file)
 
 if __name__ == "__main__":
 

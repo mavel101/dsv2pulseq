@@ -17,7 +17,7 @@ class test_all(unittest.TestCase):
         seq_list = []
         for pf in test_files_prefix:
             seq = read_dsv(os.path.join(path_test, pf), plot=False)
-            seq.write_pulseq(os.path.join(path_test, pf) + '.seq')
+            seq.make_pulseq_sequence(os.path.join(path_test, pf) + '.seq')
             seq_list.append(pf + '.seq')
 
         # Test if approved files are equal to test files

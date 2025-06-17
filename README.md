@@ -36,7 +36,7 @@ The conversion can also be done in Python by running:
 ```
 from dsv2pulseq import read_dsv
 seq = read_dsv('/path/to/dsv/dsv_prefix')
-seq.write_pulseq('external.seq')
+seq_pulseq = seq.make_pulseq_sequence('external.seq')
 ```
 
 There is an experimental function to check the shapes of RF waveforms and gradients that plots the difference between the original and converted waveforms:

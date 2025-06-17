@@ -186,7 +186,7 @@ class Sequence():
         """
         self.adc_dead_time = adc_dead_time
 
-    def write_pulseq(self, filename):
+    def make_pulseq_sequence(self, filename=None):
         """
         Create a Pulseq file from the sequence object.
         Time tracking is always done in [us] (integers), 
@@ -194,7 +194,7 @@ class Sequence():
         
         Inputs:
         --------
-        filename: Pulseq output filename
+        filename: If provided, Pulseq sequence will be saved to this file.
         """
 
         logging.info("Create Pulseq sequence file.")
@@ -345,6 +345,8 @@ class Sequence():
         pp_seq.write(filename, check_timing=False)
         end_time = time.time()
         logging.info(f"Finished creating Pulseq file in {(end_time - start_time):.2f}s.")
+
+        return pp_seq
 
     def __make_pp_rf(self, rf_event, event_del, system):
             """
