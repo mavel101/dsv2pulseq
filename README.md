@@ -31,7 +31,7 @@ dsv_to_pulseq.py -o OUT_FILE -r REF_VOLT IN_FILE_PREFIX
 ```
 from the shell.
 
-The IN_FILE_PREFIX is the prefix of the dsv files, e.g. "gre" for "gre_XXX.dsv". The OUT_FILE is the Pulseq output sequence file (default: "external.seq"). The reference voltage is the voltage the sequence was simulated with (default: 223.529007 V).
+The IN_FILE_PREFIX is the prefix of the dsv files, e.g. "gre" for "gre_XXX.dsv". The OUT_FILE is the Pulseq output sequence file (default: "external.seq"). The reference voltage is the voltage the sequence was simulated with (Siemens default: 223.529007 V).
 
 The conversion can also be done in Python by running:
 ```
@@ -48,9 +48,9 @@ check_dsv('/path/to/dsv_original/dsv_prefix', '/path/to/dsv_pulseq/dsv_prefix')
 
 Note that:  
 - Only single transmit channel RF pulses are currently supported.
-- The Pulseq sequence has the same orientation as the original sequence, when running the Pulseq interpreter in "XYZ in TRA" mode. This can fail, if in the Siemens sequence the rotation matrix is not applied to individual blocks or if a different rotation matrix is applied. 
+- The Pulseq sequence has the same orientation as the original sequence on the physical gradient axes, when running the Pulseq interpreter in "XYZ in TRA" mode.
 - The Pulseq interpreter version 1.5.0 should be used, as the versions before contain a bug in setting the RF raster time correctly. 
-- RF and gradient waveforms might be slightly different due to small numerical errors.
+- RF and gradient waveforms might be slightly different due to limited numerical accuracy of the DSV files.
 
 ## Reconstruction of Pulseq data
 

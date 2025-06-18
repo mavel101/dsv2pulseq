@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import logging
+import os
 from dsv2pulseq.sequence import Sequence
 from dsv2pulseq.read_dsv_samples import DSVFile
 from dsv2pulseq.read_dsv_inf import read_dsv_inf
@@ -68,13 +69,16 @@ def check_dsv(file_prefix1, file_prefix2, time_shift=20):
     """ 
     Checks, if dsv files from converted sequence are the same as in the original sequence
 
-    Pulseq sequence shape values are usually shifted by 20us, as there is an additional global
-    freq/phase event in the beginning of the sequence.
-    
+    Pulseq sequence shape usually have two 20us long additional global
+    freq/phase event in the beginning and end of the sequence. This can be
+    compensated by the time_shift parameter.
+
+    If provided, also the ADC shapes are compared.
+
     Parameters:
         file_prefix1: dsv file prefix of the original sequence
         file_prefix2: dsv file prefix of the Pulseq sequence
-        time_shift: time shift in us, which is applied to the shapes of file_prefix2
+        time_shift: time shift in us for the Pulseq sequence
 
     Returns:
         seq1: Sequence object of the original sequence
@@ -85,90 +89,123 @@ def check_dsv(file_prefix1, file_prefix2, time_shift=20):
     seq1 = read_dsv(file_prefix1)
     seq2 = read_dsv(file_prefix2)
 
-    len_rf = min(len(seq1.rf), len(seq2.rf))
-    len_gx = min(len(seq1.gx), len(seq2.gx))
-    len_gy = min(len(seq1.gy), len(seq2.gy))
-    len_gz = min(len(seq1.gz), len(seq2.gz))
+    if os.path.exists(file_prefix1 + "_ADC.dsv") and os.path.exists(file_prefix2 + "_ADC.dsv"):
+        adc1_dsv = DSVFile(file_prefix1 + "_ADC.dsv")
+        adc2_dsv = DSVFile(file_prefix2 + "_ADC.dsv")
+        adc_delta = adc1_dsv.definitions.horidelta
+        seq1.adc = adc1_dsv.values
+        seq2.adc = adc2_dsv.values
+    else:
+        seq1.adc = None
+        seq2.adc = None
 
     rfd1 = abs(seq1.rf)
     rfp1 = np.angle(seq1.rf)
     grx1 = seq1.gx
     gry1 = seq1.gy
     grz1 = seq1.gz
+    adc1 = seq1.adc
 
     rfd2 = abs(seq2.rf)
     rfp2 = np.angle(seq2.rf)
     grx2 = seq2.gx
     gry2 = seq2.gy
     grz2 = seq2.gz
+    adc2 = seq2.adc
 
-    shift_rf = -1* int(time_shift / seq1.delta_rf)
-    shift_grad = -1* int(time_shift / seq1.delta_grad)
+    shift_rf = int(time_shift / seq1.delta_rf)
+    shift_grad = int(time_shift / seq1.delta_grad)
 
-    rfd2 = np.roll(rfd2, shift_rf)
-    rfp2 = np.roll(rfp2, shift_rf)
-    grx2 = np.roll(grx2, shift_grad)
-    gry2 = np.roll(gry2, shift_grad)
-    grz2 = np.roll(grz2, shift_grad)
+    rfd2 = rfd2[shift_rf:-shift_rf]
+    rfp2 = rfp2[shift_rf:-shift_rf]
+    grx2 = grx2[shift_grad:-shift_grad]
+    gry2 = gry2[shift_grad:-shift_grad]
+    grz2 = grz2[shift_grad:-shift_grad]
+    if adc1 is not None and adc2 is not None:
+        shift_adc = -1* int(time_shift / adc_delta)
+        adc2 = adc2[shift_adc:]
+        subplots = 6
+    else:
+        subplots = 5
+
+    len_rf = min(len(rfd1), len(rfd2))
+    len_gx = min(len(grx1), len(grx2))
+    len_gy = min(len(gry1), len(gry2))
+    len_gz = min(len(grz1), len(grz2))
+    if adc1 is not None and adc2 is not None:
+        len_adc = min(len(adc1), len(adc2))
 
     # Plot sequence 1
-    plt.figure(figsize=(10, 8))
+    n_subplots = subplots  # 5 or 6
+    plt.figure(figsize=(10, 2 * n_subplots))
     plt.suptitle(f"Sequence 1: {file_prefix1}", fontsize=16)
-    plt.subplot(511)
+    plt.subplot(n_subplots, 1, 1)
     plt.plot(rfd1)
     plt.title("RFD")
-    plt.subplot(512)
+    plt.subplot(n_subplots, 1, 2)
     plt.plot(rfp1)
     plt.title("RFP")
-    plt.subplot(513)
+    plt.subplot(n_subplots, 1, 3)
     plt.plot(grx1)
     plt.title("GX")
-    plt.subplot(514)
+    plt.subplot(n_subplots, 1, 4)
     plt.plot(gry1)
     plt.title("GY")
-    plt.subplot(515)
+    plt.subplot(n_subplots, 1, 5)
     plt.plot(grz1)
     plt.title("GZ")
+    if n_subplots == 6:
+        plt.subplot(n_subplots, 1, 6)
+        plt.plot(adc1)
+        plt.title("ADC")
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     # Plot sequence 2
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(10, 2 * n_subplots))
     plt.suptitle(f"Sequence 2: {file_prefix2}", fontsize=16)
-    plt.subplot(511)
+    plt.subplot(n_subplots, 1, 1)
     plt.plot(rfd2)
     plt.title("RFD")
-    plt.subplot(512)
+    plt.subplot(n_subplots, 1, 2)
     plt.plot(rfp2)
     plt.title("RFP")
-    plt.subplot(513)
+    plt.subplot(n_subplots, 1, 3)
     plt.plot(grx2)
     plt.title("GX")
-    plt.subplot(514)
+    plt.subplot(n_subplots, 1, 4)
     plt.plot(gry2)
     plt.title("GY")
-    plt.subplot(515)
+    plt.subplot(n_subplots, 1, 5)
     plt.plot(grz2)
     plt.title("GZ")
+    if n_subplots == 6:
+        plt.subplot(n_subplots, 1, 6)
+        plt.plot(adc2)
+        plt.title("ADC")
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     # Plot difference
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(10, 2 * n_subplots))
     plt.suptitle(f"Difference: {file_prefix1} - {file_prefix2}", fontsize=16)
-    plt.subplot(511)
+    plt.subplot(n_subplots, 1, 1)
     plt.plot(rfd1[:len_rf] - rfd2[:len_rf])
     plt.title("RFD")
-    plt.subplot(512)
+    plt.subplot(n_subplots, 1, 2)
     plt.plot(rfp1[:len_rf] - rfp2[:len_rf])
     plt.title("RFP")
-    plt.subplot(513)
+    plt.subplot(n_subplots, 1, 3)
     plt.plot(grx1[:len_gx] - grx2[:len_gx])
     plt.title("GX")
-    plt.subplot(514)
+    plt.subplot(n_subplots, 1, 4)
     plt.plot(gry1[:len_gy] - gry2[:len_gy])
     plt.title("GY")
-    plt.subplot(515)
+    plt.subplot(n_subplots, 1, 5)
     plt.plot(grz1[:len_gz] - grz2[:len_gz])
     plt.title("GZ")
+    if n_subplots == 6:
+        plt.subplot(n_subplots, 1, 6)
+        plt.plot(adc1[:len_adc] - adc2[:len_adc])
+        plt.title("ADC")
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     plt.show()

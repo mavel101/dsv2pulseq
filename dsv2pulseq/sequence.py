@@ -8,12 +8,6 @@ import pypulseq as pp
 from dsv2pulseq.helper import round_up_to_raster, waveform_from_seqblock
 
 
-def init_event_dict():
-    return {'rf': None, 'gx': None, 'gy': None, 'gz': None, 'adc': None, 'trig': None, 'delay': None}
-
-def extract_events(event_dict):
-    return [event for event in event_dict.values() if event is not None]
-
 class Block():
     """
     Event block in "Siemens style", allows more than one object per channel
@@ -79,7 +73,7 @@ class Grad():
     def __init__(self, channel, amp, duration, ramp_up, ramp_dn, shape_ix):
         self.type = 'g' + channel 
         self.channel = channel
-        self.amp = amp
+        self.amp = amp # amplitude in logical! coordinate system
         self.duration = duration # flat_top + ramp_up
         self.ramp_up = ramp_up
         self.ramp_dn = ramp_dn
@@ -124,7 +118,7 @@ class Sequence():
         # Conversion factors from dsv to (Py)Pulseq (SI) units
         self.gamma = 42.576e6
         self.cf_time = 1e-6 # [us] -> [s]
-        self.cf_grad = -1* 1e-3*self.gamma # [mT/m] -> [Hz/m], the "-1" is to be compatible to the "XYZ in TRA" mode of Pulseq
+        self.cf_grad = 1e-3*self.gamma # [mT/m] -> [Hz/m]
 
         # ref_volt is voltage for 1ms 180 deg rectangular pulse
         # -> pulse [Hz] = pulse[V]/ref_volt[V] * 500[Hz]
@@ -217,7 +211,7 @@ class Sequence():
         pp_seq = pp.Sequence(system=system)
         pp_seq.set_definition('Name', os.path.basename(filename))
 
-        pulseq_events = init_event_dict()
+        pulseq_events = self.__init_event_dict()
         ts_offset = 0
 
         if not self.block_list:
@@ -245,7 +239,7 @@ class Sequence():
                         check_trig = any(event.type == 'trig' for event in events) and pulseq_events['trig'] is not None
                         split_pt = round(pulseq_time / self.delta_grad)
                         if check_adc or check_rf or check_trig: # split block
-                            pulseq_events_tmp = init_event_dict()
+                            pulseq_events_tmp = self.__init_event_dict()
                             for key, pp_event in pulseq_events.items():
                                 if pp_event is None:
                                     continue
@@ -257,7 +251,7 @@ class Sequence():
                                         pulseq_events[key] = g_pre
                                     else:
                                         raise ValueError(f"Event with type {pp_event.type} in block with index {block.block_idx} cannot be split. Only gradients can be split.")
-                            pp_seq.add_block(*extract_events(pulseq_events))
+                            pp_seq.add_block(*self.__extract_events(pulseq_events))
                             pulseq_events = pulseq_events_tmp.copy()
                             ts_offset = round(int(ts) / self.delta_grad) * self.delta_grad
                         else: # concatenate gradients
@@ -276,21 +270,21 @@ class Sequence():
                                             len_wf = max([len(wf) for wf in g_wf])
                                             g_wf = [np.concatenate([wf, np.zeros(len_wf - len(wf))]) for wf in g_wf]
                                             g_wf = g_wf[0] + g_wf[1]
-                                            pulseq_events[event.type] = pp.make_arbitrary_grad(channel=event.channel, waveform=g_wf, system=system)
+                                            pulseq_events[event.type] = self.__make_arbitrary_grad(g_wf, event.channel, 0, system=system)
                                         concat_g[event.type] = True
                                     else:
                                         raise ValueError("Unrecognized event type during concatenation.")
                     else: # no split needed, start new block
-                        block_dur = pp.calc_duration(*extract_events(pulseq_events))
-                        block_dur_rounded = round_up_to_raster(pp.calc_duration(*extract_events(pulseq_events)), 5)
+                        block_dur = pp.calc_duration(*self.__extract_events(pulseq_events))
+                        block_dur_rounded = round_up_to_raster(pp.calc_duration(*self.__extract_events(pulseq_events)), 5)
                         if abs(block_dur - block_dur_rounded) > 1e-7:
                             pulseq_events['delay'] = pp.make_delay(block_dur_rounded)
-                        pp_seq.add_block(*extract_events(pulseq_events))
+                        pp_seq.add_block(*self.__extract_events(pulseq_events))
 
                         # Add remaining delay to the new block
                         delay = round_up_to_raster((int(ts) - ts_offset) * self.cf_time, 5)
                         delay_remain = delay - block_dur_rounded
-                        pulseq_events = init_event_dict()
+                        pulseq_events = self.__init_event_dict()
                         pulseq_events['delay'] = pp.make_delay(delay_remain)
                         ts_offset += round(block_dur_rounded  / self.cf_time)
 
@@ -331,7 +325,7 @@ class Sequence():
         if self.__check_delay(pulseq_events, delay):
             pulseq_events['delay'] = pp.make_delay(delay)  # account for possible delay in last block
         if any(pulseq_events.values()):
-            pp_seq.add_block(*extract_events(pulseq_events))
+            pp_seq.add_block(*self.__extract_events(pulseq_events))
 
         # check timing of the sequence
         # set raster time to 1us for timing check, as otherwise ADC delays will throw errors
@@ -347,6 +341,12 @@ class Sequence():
         logging.info(f"Finished creating Pulseq file in {(end_time - start_time):.2f}s.")
 
         return pp_seq
+
+    def __init_event_dict(self):
+        return {'rf': None, 'gx': None, 'gy': None, 'gz': None, 'adc': None, 'trig': None, 'delay': None}
+
+    def __extract_events(self, event_dict):
+        return [event for event in event_dict.values() if event is not None]
 
     def __make_pp_rf(self, rf_event, event_del, system):
             """
@@ -364,31 +364,29 @@ class Sequence():
         Make a Pulseq gradient event
         """
 
+        g_wf = self.get_shape(grad_event) * self.cf_grad
+        g_del = round_up_to_raster(event_del*self.cf_time, 5)
         if grad_event.ramp_dn != 0:
             # trapezoid
+            g_amp = g_wf[np.argmax(np.abs(g_wf))]
             g_flat = round_up_to_raster((grad_event.duration - grad_event.ramp_up) * self.cf_time, 5)
+            if g_flat == 0:
+                g_amp += (g_wf[1] - g_wf[0]) / 2 # correct amp for special case of a triangular gradient
             g_ramp_up = round_up_to_raster(grad_event.ramp_up*self.cf_time, 5)
             g_ramp_dn = round_up_to_raster(grad_event.ramp_dn*self.cf_time, 5)
-            g_del = round_up_to_raster(event_del*self.cf_time, 5)
-            return pp.make_trapezoid(channel=grad_event.channel, amplitude=grad_event.amp*self.cf_grad, flat_time=g_flat, rise_time=g_ramp_up, fall_time=g_ramp_dn, delay=g_del, system=system)
+            return pp.make_trapezoid(channel=grad_event.channel, amplitude=g_amp, flat_time=g_flat, rise_time=g_ramp_up, fall_time=g_ramp_dn, delay=g_del, system=system)
         elif grad_event.duration == 0 and grad_event.ramp_up == 0:
             # zero duration gradient
             return None
         else:
-            # arbitrary
-            g_wf = self.get_shape(grad_event)
-            return pp.make_arbitrary_grad(channel=grad_event.channel, waveform=g_wf*self.cf_grad, delay=event_del*self.cf_time, system=system)
+            return self.__make_arbitrary_grad(g_wf, grad_event.channel, delay=g_del, system=system)
 
-    def __split_gradients(self, grad_event, split_pt, system):
-        """
-        Split gradients at the split point.
-        """
-        def create_grad(wf, channel, system):
-            grad = pp.make_arbitrary_grad(channel=channel, waveform=wf, delay=0, system=system)
-            return grad
-
-        # Pypulseq throws an error if the waveform has only one point.
-        def fix_single_point_grad(wf, channel, system):
+    def __make_arbitrary_grad(self, wf, channel, delay, system):
+        
+        if len(wf) > 1:
+            grad = pp.make_arbitrary_grad(channel=channel, waveform=wf, delay=delay, system=system)
+        else:
+            # Pypulseq throws an error if the waveform has only one point.
             grad = pp.make_arbitrary_grad(
                 channel=channel,
                 waveform=np.concatenate([wf, np.zeros(1, dtype=float)]),
@@ -401,35 +399,32 @@ class Sequence():
             grad.first = wf[0]
             grad.last = wf[0]
             grad.area = np.sum(wf * system.grad_raster_time)
-            return grad
+        return grad
+
+    def __split_gradients(self, grad_event, split_pt, system):
+        """
+        Split gradients at the split point.
+        """
 
         g_wf = waveform_from_seqblock(grad_event, system=system) # already contains delay
         g_pre_wf = g_wf[:split_pt]
         g_post_wf = g_wf[split_pt:]
 
-        if len(g_pre_wf) == 1:
-            g_pre = fix_single_point_grad(g_pre_wf, grad_event.channel, system)
-        else:
-            g_pre = create_grad(g_pre_wf, grad_event.channel, system)
-
-        if len(g_post_wf) == 1:
-            g_post = fix_single_point_grad(g_post_wf, grad_event.channel, system)
-        else:
-            g_post = create_grad(g_post_wf, grad_event.channel, system)
-
+        g_pre = self.__make_arbitrary_grad(g_pre_wf, grad_event.channel, 0, system)
+        g_post = self.__make_arbitrary_grad(g_post_wf, grad_event.channel, 0, system)
         return g_pre, g_post
 
     def __check_delay(self, pulseq_events, delay):
         """
         Check if delay is the longest delay in the current event block
         """
-        pulseq_events = extract_events(pulseq_events)
+        pulseq_events = self.__extract_events(pulseq_events)
         delays = [item.delay for item in pulseq_events if (item.type == "delay" and item is not None)] + [0]
         if delay > max(delays):
             return True
         else:
             return False
-        
+    
     def shift_timestamps(self):
         """
         Shift RF events by the RF lead time and ADC events by the ADC dead time

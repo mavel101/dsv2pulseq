@@ -63,7 +63,7 @@ def read_dsv_inf(file, seq):
                 if line[ix[5]+1:ix[6]].strip():
                     gy_str = line[ix[5]+1:ix[6]].strip()
                     gy_ix = find_char(gy_str, '/')
-                    gy_amp = float(gy_str[gy_str.rfind(':')+1:gy_ix[0]].strip())
+                    gy_amp = float(gy_str[gy_str.rfind(':')+1:gy_ix[0]].strip()) # amplitude in logical! coordinate system
                     gy_rut = int(gy_str[gy_ix[0]+1:gy_ix[1]].strip())
                     gy_dur = int(gy_str[gy_ix[1]+1:gy_ix[2]].strip())
                     gy_rdt = int(gy_str[gy_ix[2]+1:].strip())
