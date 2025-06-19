@@ -122,8 +122,8 @@ def check_dsv(file_prefix1, file_prefix2, time_shift=20):
     gry2 = gry2[shift_grad:-shift_grad]
     grz2 = grz2[shift_grad:-shift_grad]
     if adc1 is not None and adc2 is not None:
-        shift_adc = -1* int(time_shift / adc_delta)
-        adc2 = adc2[shift_adc:]
+        shift_adc = int(time_shift / adc_delta)
+        adc2 = adc2[shift_adc:-shift_adc]
         subplots = 6
     else:
         subplots = 5
