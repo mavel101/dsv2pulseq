@@ -27,31 +27,31 @@ class Block():
         return f"Block {self.block_idx} with duration {self.block_duration} us at start time {self.start_time} us with timestamps {self.timestamps}."
     
     def add_timestamp(self, ts):
-        if not str(ts) in self.timestamps:
-            self.timestamps[str(ts)] = []
+        if not ts in self.timestamps:
+            self.timestamps[ts] = []
 
     def add_rf(self, duration, shape_ix, ts):
         self.add_timestamp(ts)
         rf = Rf(duration, shape_ix)
-        self.timestamps[str(ts)].append(rf)
+        self.timestamps[ts].append(rf)
     
     def add_grad(self, channel, amp, duration, ramp_up, ramp_dn, shape_ix, ts):
         self.add_timestamp(ts)
         grad = Grad(channel, amp, duration, ramp_up, ramp_dn, shape_ix)
-        self.timestamps[str(ts)].append(grad)
+        self.timestamps[ts].append(grad)
 
     def add_adc(self, duration, samples, ts):
         self.add_timestamp(ts)
         adc = Adc(duration, samples)
-        self.timestamps[str(ts)].append(adc)
+        self.timestamps[ts].append(adc)
 
     def add_trig(self, duration, trig_type, ts):
         self.add_timestamp(ts)
         trig = Trig(duration, trig_type)
-        self.timestamps[str(ts)].append(trig)
+        self.timestamps[ts].append(trig)
 
     def set_freqphase(self, freq_phase, ts):
-        for event in self.timestamps[str(ts)]:
+        for event in self.timestamps[ts]:
             if event.type == 'rf' or event.type == 'adc':
                 event.set_freqphase(freq_phase)
 
@@ -155,14 +155,17 @@ class Sequence():
     def get_shape(self, event):
         """
         Gets shape for RF or gradient event
+
+        Logical coordinates 'gr', 'gp', 'gs' only map to the physical coordinates
+        when the sequence was simulated with transversal orientation and PE direction A->P
         """
         if event.type == 'rf':
             return self.rf[event.shape_ix]
-        elif event.type == 'gx':
+        elif event.type == 'gx' or event.type == 'gr':
             return self.gx[event.shape_ix]
-        elif event.type == 'gy':
+        elif event.type == 'gy' or event.type == 'gp':
             return self.gy[event.shape_ix]
-        elif event.type == 'gz':
+        elif event.type == 'gz' or event.type == 'gs':
             return self.gz[event.shape_ix]
         else:
             return None
@@ -180,7 +183,7 @@ class Sequence():
         """
         self.adc_dead_time = adc_dead_time
 
-    def make_pulseq_sequence(self, filename=None):
+    def make_pulseq_sequence(self, filename=None, fov=[None, None, None]):
         """
         Create a Pulseq file from the sequence object.
         Time tracking is always done in [us] (integers), 
@@ -189,6 +192,7 @@ class Sequence():
         Inputs:
         --------
         filename: If provided, Pulseq sequence will be saved to this file.
+        fov: Field of view in [mm] for x, y, z direction, which is set in the Pulseq file
         """
 
         logging.info("Create Pulseq sequence file.")
@@ -210,6 +214,8 @@ class Sequence():
 
         pp_seq = pp.Sequence(system=system)
         pp_seq.set_definition('Name', os.path.basename(filename))
+        if all(fov):
+            pp_seq.set_definition("FOV", [fov[0]*1e-3, fov[1]*1e-3, fov[2]*1e-3])
 
         pulseq_events = self.__init_event_dict()
         ts_offset = 0
@@ -219,7 +225,7 @@ class Sequence():
             return
 
         # Shift RF and ADC timestamps to account for lead and dead times
-        block_list = self.shift_timestamps()
+        block_list = self.make_pulseq_block_list()
 
         for ix, block in enumerate(block_list):
             block_offset = block_list[ix - 1].block_duration if ix > 0 else 0
@@ -227,13 +233,14 @@ class Sequence():
             for ts in block.timestamps:
                 events = block.timestamps[ts]
                 concat_g = {'gx': False, 'gy': False, 'gz': False}
-                pulseq_time = int(ts) - ts_offset # timestamp in the current Pulseq block [us]
+                pulseq_time = ts - ts_offset # timestamp in the current Pulseq block [us]
 
                 # Check if the block has to be split (Pulseq only allows one event per channel per block)
                 # Gradients are either splitted or concatenated, depending on the presence of ADC, RF or Trigger events
                 if any(pulseq_events[event.type] is not None for event in events):
-                    split = any((round(pp.calc_duration(pp_event) / self.cf_time) > pulseq_time) for pp_event in pulseq_events.values() if pp_event is not None)
-                    if split: # block needs to be split or concatenated
+                    split = any((round(pp.calc_duration(pp_event) / self.cf_time) > pulseq_time) 
+                                for pp_event in pulseq_events.values() if pp_event is not None) # check if any event exceeds the current timestamp
+                    if split:
                         check_adc = any(event.type == 'adc' for event in events) and pulseq_events['adc'] is not None
                         check_rf = any(event.type == 'rf' for event in events) and pulseq_events['rf'] is not None
                         check_trig = any(event.type == 'trig' for event in events) and pulseq_events['trig'] is not None
@@ -253,17 +260,15 @@ class Sequence():
                                         raise ValueError(f"Event with type {pp_event.type} in block with index {block.block_idx} cannot be split. Only gradients can be split.")
                             pp_seq.add_block(*self.__extract_events(pulseq_events))
                             pulseq_events = pulseq_events_tmp.copy()
-                            ts_offset = round(int(ts) / self.delta_grad) * self.delta_grad
+                            ts_offset = round(ts / self.delta_grad) * self.delta_grad
                         else: # concatenate gradients
                             for event in events:
                                 if pulseq_events[event.type] is not None:
-                                    event_del = int(ts) - ts_offset
+                                    event_del = ts - ts_offset
                                     if event_del < 0:
                                         raise ValueError("Negative event delay encountered during concatenation.")
                                     pp_event = pulseq_events[event.type]
-                                    if event.type == 'trig':
-                                        raise ValueError(f"Trigger event in block with index {block.block_idx} cannot be concatenated.")
-                                    elif event.type[0] == 'g':
+                                    if event.type[0] == 'g':
                                         g_conc = self.__make_pp_grad(event, event_del, system)
                                         if g_conc is not None:
                                             g_wf = [waveform_from_seqblock(pp_event, system=system), waveform_from_seqblock(g_conc, system=system)]
@@ -273,7 +278,7 @@ class Sequence():
                                             pulseq_events[event.type] = self.__make_arbitrary_grad(g_wf, event.channel, 0, system=system)
                                         concat_g[event.type] = True
                                     else:
-                                        raise ValueError("Unrecognized event type during concatenation.")
+                                        raise ValueError(f"Only gradients can be concatenated, not events with type {event.type}.")
                     else: # no split needed, start new block
                         block_dur = pp.calc_duration(*self.__extract_events(pulseq_events))
                         block_dur_rounded = round_up_to_raster(pp.calc_duration(*self.__extract_events(pulseq_events)), 5)
@@ -282,7 +287,7 @@ class Sequence():
                         pp_seq.add_block(*self.__extract_events(pulseq_events))
 
                         # Add remaining delay to the new block
-                        delay = round_up_to_raster((int(ts) - ts_offset) * self.cf_time, 5)
+                        delay = round_up_to_raster((ts - ts_offset) * self.cf_time, 5)
                         delay_remain = delay - block_dur_rounded
                         pulseq_events = self.__init_event_dict()
                         pulseq_events['delay'] = pp.make_delay(delay_remain)
@@ -290,7 +295,7 @@ class Sequence():
 
                 # add events to the block
                 for event in events:
-                    event_del = int(ts) - ts_offset
+                    event_del = ts - ts_offset
                     if event_del < 0:
                         raise ValueError("Negative event delay encountered.")
                     if event.type == 'rf':
@@ -321,7 +326,7 @@ class Sequence():
                             logging.info(f'Unknown trigger type {event.trig_type} in block {block.block_idx} at time stamp {ts}. Replaced with delay.')
 
         # add last block
-        delay = round_up_to_raster((int(ts) - ts_offset) * self.cf_time, 5)
+        delay = round_up_to_raster((ts - ts_offset) * self.cf_time, 5)
         if self.__check_delay(pulseq_events, delay):
             pulseq_events['delay'] = pp.make_delay(delay)  # account for possible delay in last block
         if any(pulseq_events.values()):
@@ -364,21 +369,12 @@ class Sequence():
         Make a Pulseq gradient event
         """
 
-        g_wf = self.get_shape(grad_event) * self.cf_grad
-        g_del = round_up_to_raster(event_del*self.cf_time, 5)
-        if grad_event.ramp_dn != 0:
-            # trapezoid
-            g_amp = g_wf[np.argmax(np.abs(g_wf))]
-            g_flat = round_up_to_raster((grad_event.duration - grad_event.ramp_up) * self.cf_time, 5)
-            if g_flat == 0:
-                g_amp += (g_wf[1] - g_wf[0]) / 2 # correct amp for special case of a triangular gradient
-            g_ramp_up = round_up_to_raster(grad_event.ramp_up*self.cf_time, 5)
-            g_ramp_dn = round_up_to_raster(grad_event.ramp_dn*self.cf_time, 5)
-            return pp.make_trapezoid(channel=grad_event.channel, amplitude=g_amp, flat_time=g_flat, rise_time=g_ramp_up, fall_time=g_ramp_dn, delay=g_del, system=system)
-        elif grad_event.duration == 0 and grad_event.ramp_up == 0:
+        if grad_event.duration == 0 and grad_event.ramp_up == 0:
             # zero duration gradient
             return None
         else:
+            g_wf = self.get_shape(grad_event) * self.cf_grad
+            g_del = round_up_to_raster(event_del*self.cf_time, 5)
             return self.__make_arbitrary_grad(g_wf, grad_event.channel, delay=g_del, system=system)
 
     def __make_arbitrary_grad(self, wf, channel, delay, system):
@@ -425,47 +421,91 @@ class Sequence():
         else:
             return False
     
-    def shift_timestamps(self):
+    def make_pulseq_block_list(self):
         """
-        Shift RF events by the RF lead time and ADC events by the ADC dead time
-        to make sure they are not violated, when creating the Pulseq sequence.
+        Restructures the block list to simplify writing the Pulseq file. This includes:
+        - RF events are shifted by the RF lead time to not violate it
+        - ADC events are shifted by the ADC dead time to not violate it
+
+        Additionally, gradient events are created on all axes for all time periods where a gradient is present on any axis.
+        Gradient timing from the INF file is in logical coordinates, while gradient waveforms (GRX/GRY/GRZ) are in physical coordinates. 
+        Since the rotation matrix is unavailable, we conservatively assume all axes are active wherever any axis has gradient activity.
 
         Returns:
         --------
         A copy of self.block_list with 'rf' events shifted earlier by self.rf_lead_time.
         The original self.block_list remains unchanged.
         """
-        
+
         # Deep copy to avoid modifying original blocks or event lists
         block_list_shifted = copy.deepcopy(self.block_list)
 
+        grad_offset = 0
         for block in block_list_shifted:
             shifted_timestamps = {}
+            grad_ts = 0
+            grad_end_last = 0
+            grads = {'x': None, 'y': None, 'z': None}
 
             for ts_str in block.timestamps:
                 ts = int(ts_str)
                 events = block.timestamps[ts_str]
-                if not events and ts not in shifted_timestamps:
-                    shifted_timestamps[ts] = []
+
+                if not events:
+                    shifted_timestamps.setdefault(ts, [])
+
                 for event in events:
                     if event.type == 'rf':
                         new_ts = ts - self.rf_lead_time
-                        if new_ts not in shifted_timestamps:
-                            shifted_timestamps[new_ts] = []
-                        shifted_timestamps[new_ts].append(event)
+                        shifted_timestamps.setdefault(new_ts, []).append(event)
+
                     elif event.type == 'adc':
                         new_ts = ts - self.adc_dead_time
-                        if new_ts not in shifted_timestamps:
-                            shifted_timestamps[new_ts] = []
-                        shifted_timestamps[new_ts].append(event)
-                    else:
-                        if ts not in shifted_timestamps:
-                            shifted_timestamps[ts] = []
-                        shifted_timestamps[ts].append(event)
+                        shifted_timestamps.setdefault(new_ts, []).append(event)
 
-            # Sort timestamps and convert keys back to strings
+                    elif event.type[0] == 'g':
+                        grad_start = ts
+                        grad_dur = event.duration + event.ramp_dn
+                        grad_end = ts + grad_dur
+
+                        if grad_start >= grad_end_last and grad_end > grad_offset:
+                            if grads['x'] is not None:
+                                for g in grads.values():
+                                    shifted_timestamps.setdefault(grad_ts, []).append(g)
+
+                            if grad_start < grad_offset:
+                                grad_start = grad_offset
+                                grad_dur = grad_end - grad_start
+
+                            shape_ix = slice((block.start_time + grad_start) // self.delta_grad,
+                                            (block.start_time + grad_start + grad_dur) // self.delta_grad)
+
+                            for axis in grads:
+                                grads[axis] = Grad(axis, 0, grad_dur, grad_dur, 0, shape_ix)
+
+                            grad_ts = grad_start
+                            grad_end_last = grad_end
+
+                        elif grad_end > grad_end_last:
+                            grad_dur_new = grads['x'].duration + grad_end - grad_end_last
+                            shape_end_new = grads['x'].shape_ix.stop + (grad_end - grad_end_last) // self.delta_grad
+
+                            for g in grads.values():
+                                g.duration = g.ramp_up = grad_dur_new
+                                g.shape_ix = slice(g.shape_ix.start, shape_end_new)
+
+                            grad_end_last = grad_end
+
+                    else:
+                        shifted_timestamps.setdefault(ts, []).append(event)
+
+            grad_offset = grad_end_last - block.block_duration # gradients can extend beyond the block duration
+            if grads['x'] is not None:
+                for g in grads.values():
+                    shifted_timestamps.setdefault(grad_ts, []).append(g)
+
             block.timestamps = dict(
-                sorted(((str(ts), evts) for ts, evts in shifted_timestamps.items()), key=lambda x: int(x[0]))
+                sorted(((ts, evts) for ts, evts in shifted_timestamps.items()), key=lambda x: int(x[0]))
             )
 
         return block_list_shifted

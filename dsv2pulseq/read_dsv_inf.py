@@ -8,9 +8,7 @@ def find_char(s, ch):
 def read_dsv_inf(file, seq):
     """ Read INF dsv file (tested only for VE)
 
-    The INF file contains the gradients in logical coordinate system (GP,GR,GS),
-    which corresponds to (GY,GX,GZ) in physical coordinate system IF the sequence was simulated
-    in transversal orientation and phase encode direction A -> P
+    Important: The INF file contains the gradients in logical coordinate system (GP,GR,GS)
     """
 
     delta_rf = seq.delta_rf
@@ -61,32 +59,32 @@ def read_dsv_inf(file, seq):
                     if "VOP_READOUT" not in adc_str: # pTx RX events during RFs are not ADCs
                         block.add_adc(adc_dur, adc_samples, ts)
                 if line[ix[5]+1:ix[6]].strip():
-                    gy_str = line[ix[5]+1:ix[6]].strip()
-                    gy_ix = find_char(gy_str, '/')
-                    gy_amp = float(gy_str[gy_str.rfind(':')+1:gy_ix[0]].strip()) # amplitude in logical! coordinate system
-                    gy_rut = int(gy_str[gy_ix[0]+1:gy_ix[1]].strip())
-                    gy_dur = int(gy_str[gy_ix[1]+1:gy_ix[2]].strip())
-                    gy_rdt = int(gy_str[gy_ix[2]+1:].strip())
-                    gy_shape_ix = slice((block.start_time+ts)//delta_grad, (block.start_time+ts+gy_dur+gy_rdt)//delta_grad)
-                    block.add_grad('y', gy_amp, gy_dur, gy_rut, gy_rdt, gy_shape_ix, ts)
+                    gp_str = line[ix[5]+1:ix[6]].strip()
+                    gp_ix = find_char(gp_str, '/')
+                    gp_amp = float(gp_str[gp_str.rfind(':')+1:gp_ix[0]].strip()) # amplitude in logical! coordinate system
+                    gp_rut = int(gp_str[gp_ix[0]+1:gp_ix[1]].strip())
+                    gp_dur = int(gp_str[gp_ix[1]+1:gp_ix[2]].strip())
+                    gp_rdt = int(gp_str[gp_ix[2]+1:].strip())
+                    gp_shape_ix = slice((block.start_time+ts)//delta_grad, (block.start_time+ts+gp_dur+gp_rdt)//delta_grad)
+                    block.add_grad('p', gp_amp, gp_dur, gp_rut, gp_rdt, gp_shape_ix, ts)
                 if line[ix[6]+1:ix[7]].strip():
-                    gx_str = line[ix[6]+1:ix[7]].strip()
-                    gx_ix = find_char(gx_str, '/')
-                    gx_amp = float(gx_str[gx_str.rfind(':')+1:gx_ix[0]].strip())
-                    gx_rut = int(gx_str[gx_ix[0]+1:gx_ix[1]].strip())
-                    gx_dur = int(gx_str[gx_ix[1]+1:gx_ix[2]].strip())
-                    gx_rdt = int(gx_str[gx_ix[2]+1:].strip())
-                    gx_shape_ix = slice((block.start_time+ts)//delta_grad, (block.start_time+ts+gx_dur+gx_rdt)//delta_grad)
-                    block.add_grad('x', gx_amp, gx_dur, gx_rut, gx_rdt, gx_shape_ix, ts)
+                    gr_str = line[ix[6]+1:ix[7]].strip()
+                    gr_ix = find_char(gr_str, '/')
+                    gr_amp = float(gr_str[gr_str.rfind(':')+1:gr_ix[0]].strip())
+                    gr_rut = int(gr_str[gr_ix[0]+1:gr_ix[1]].strip())
+                    gr_dur = int(gr_str[gr_ix[1]+1:gr_ix[2]].strip())
+                    gr_rdt = int(gr_str[gr_ix[2]+1:].strip())
+                    gr_shape_ix = slice((block.start_time+ts)//delta_grad, (block.start_time+ts+gr_dur+gr_rdt)//delta_grad)
+                    block.add_grad('r', gr_amp, gr_dur, gr_rut, gr_rdt, gr_shape_ix, ts)
                 if line[ix[7]+1:ix[8]].strip():
-                    gz_str = line[ix[7]+1:ix[8]].strip()
-                    gz_ix = find_char(gz_str, '/')
-                    gz_amp = float(gz_str[gz_str.rfind(':')+1:gz_ix[0]].strip())
-                    gz_rut = int(gz_str[gz_ix[0]+1:gz_ix[1]].strip())
-                    gz_dur = int(gz_str[gz_ix[1]+1:gz_ix[2]].strip())
-                    gz_rdt = int(gz_str[gz_ix[2]+1:].strip())
-                    gz_shape_ix = slice((block.start_time+ts)//delta_grad, (block.start_time+ts+gz_dur+gz_rdt)//delta_grad)
-                    block.add_grad('z', gz_amp, gz_dur, gz_rut, gz_rdt, gz_shape_ix, ts)
+                    gs_str = line[ix[7]+1:ix[8]].strip()
+                    gs_ix = find_char(gs_str, '/')
+                    gs_amp = float(gs_str[gs_str.rfind(':')+1:gs_ix[0]].strip())
+                    gs_rut = int(gs_str[gs_ix[0]+1:gs_ix[1]].strip())
+                    gs_dur = int(gs_str[gs_ix[1]+1:gs_ix[2]].strip())
+                    gs_rdt = int(gs_str[gs_ix[2]+1:].strip())
+                    gs_shape_ix = slice((block.start_time+ts)//delta_grad, (block.start_time+ts+gs_dur+gs_rdt)//delta_grad)
+                    block.add_grad('s', gs_amp, gs_dur, gs_rut, gs_rdt, gs_shape_ix, ts)
                 if line[ix[8]+1:ix[9]].strip():
                     trig_str = line[ix[8]+1:ix[9]].strip()
                     trig_type = trig_str[trig_str.rfind(':')+1:trig_str.rfind('/')].strip()

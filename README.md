@@ -43,18 +43,18 @@ seq_pulseq = seq.make_pulseq_sequence('external.seq')
 There is an experimental function to check the shapes of RF waveforms and gradients that plots the difference between the original and converted waveforms:
 ```
 from dsv2pulseq import check_dsv
-check_dsv('/path/to/dsv_original/dsv_prefix', '/path/to/dsv_pulseq/dsv_prefix')
+check_dsv('/path_to_dsv/dsv_prefix_original', 'path_to_dsv/dsv_prefix_pulseq')
 ```
 
 Note that:  
 - Only single transmit channel RF pulses are currently supported.
-- The Pulseq sequence has the same orientation as the original sequence on the physical gradient axes, when running the Pulseq interpreter in "XYZ in TRA" mode.
+- The Pulseq sequence has the same orientation as the original sequence in the physical/scanner coordinate system, when running the Pulseq interpreter in "XYZ in TRA" mode.
 - The Pulseq interpreter version 1.5.0 should be used, as the versions before contain a bug in setting the RF raster time correctly. 
 - RF and gradient waveforms might be slightly different due to limited numerical accuracy of the DSV files.
 
 ## Reconstruction of Pulseq data
 
-Data acquired with the converted Pulseq sequence can not be easily reconstructed, as the scan headers containing the meta information are missing.
+Data acquired with the converted Pulseq sequence cannot be easily reconstructed, as the scan headers containing the meta information are missing.
 The data from the Pulseq sequence (IN_FILE_2) can be inserted into a raw data file acquired with the original sequence (IN_FILE_1) using twixtools (see dependencies). If twixtools is installed, the following command will insert the data:
 ```
 insert_twix_data.py IN_FILE_1 IN_FILE_2 -o OUT_FILE
