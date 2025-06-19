@@ -228,6 +228,8 @@ class Sequence():
         block_list = self.make_pulseq_block_list()
 
         for ix, block in enumerate(block_list):
+            if ix == 1:
+                pass
             block_offset = block_list[ix - 1].block_duration if ix > 0 else 0
             ts_offset -= block_offset # offset time if Siemens block is splitted
             for ts in block.timestamps:
@@ -235,63 +237,68 @@ class Sequence():
                 concat_g = {'gx': False, 'gy': False, 'gz': False}
                 pulseq_time = ts - ts_offset # timestamp in the current Pulseq block [us]
 
-                # Check if the block has to be split (Pulseq only allows one event per channel per block)
-                # Gradients are either splitted or concatenated, depending on the presence of ADC, RF or Trigger events
-                if any(pulseq_events[event.type] is not None for event in events):
-                    split = any((round(pp.calc_duration(pp_event) / self.cf_time) > pulseq_time) 
-                                for pp_event in pulseq_events.values() if pp_event is not None) # check if any event exceeds the current timestamp
-                    if split:
-                        check_adc = any(event.type == 'adc' for event in events) and pulseq_events['adc'] is not None
-                        check_rf = any(event.type == 'rf' for event in events) and pulseq_events['rf'] is not None
-                        check_trig = any(event.type == 'trig' for event in events) and pulseq_events['trig'] is not None
-                        split_pt = round(pulseq_time / self.delta_grad)
-                        if check_adc or check_rf or check_trig: # split block
-                            pulseq_events_tmp = self.__init_event_dict()
-                            for key, pp_event in pulseq_events.items():
-                                if pp_event is None:
-                                    continue
-                                pp_dur = round(pp.calc_duration(pp_event) / self.cf_time)
-                                if pp_dur > pulseq_time:
-                                    if hasattr(pp_event, 'waveform') or hasattr(pp_event, 'amplitude'):
-                                        g_pre, g_post = self.__split_gradients(pp_event, split_pt, system)
-                                        pulseq_events_tmp[key] = g_post
-                                        pulseq_events[key] = g_pre
-                                    else:
-                                        raise ValueError(f"Event with type {pp_event.type} in block with index {block.block_idx} cannot be split. Only gradients can be split.")
-                            pp_seq.add_block(*self.__extract_events(pulseq_events))
-                            pulseq_events = pulseq_events_tmp.copy()
-                            ts_offset = round(ts / self.delta_grad) * self.delta_grad
-                        else: # concatenate gradients
-                            for event in events:
-                                if pulseq_events[event.type] is not None:
-                                    event_del = ts - ts_offset
-                                    if event_del < 0:
-                                        raise ValueError("Negative event delay encountered during concatenation.")
-                                    pp_event = pulseq_events[event.type]
-                                    if event.type[0] == 'g':
-                                        g_conc = self.__make_pp_grad(event, event_del, system)
-                                        if g_conc is not None:
-                                            g_wf = [waveform_from_seqblock(pp_event, system=system), waveform_from_seqblock(g_conc, system=system)]
-                                            len_wf = max([len(wf) for wf in g_wf])
-                                            g_wf = [np.concatenate([wf, np.zeros(len_wf - len(wf))]) for wf in g_wf]
-                                            g_wf = g_wf[0] + g_wf[1]
-                                            pulseq_events[event.type] = self.__make_arbitrary_grad(g_wf, event.channel, 0, system=system)
-                                        concat_g[event.type] = True
-                                    else:
-                                        raise ValueError(f"Only gradients can be concatenated, not events with type {event.type}.")
-                    else: # no split needed, start new block
-                        block_dur = pp.calc_duration(*self.__extract_events(pulseq_events))
-                        block_dur_rounded = round_up_to_raster(pp.calc_duration(*self.__extract_events(pulseq_events)), 5)
-                        if abs(block_dur - block_dur_rounded) > 1e-7:
-                            pulseq_events['delay'] = pp.make_delay(block_dur_rounded)
-                        pp_seq.add_block(*self.__extract_events(pulseq_events))
+                # check if any event exceeds the current timestamp
+                event_exceeds = {}
+                for key, event in pulseq_events.items():
+                    if event is not None:
+                        duration = round(pp.calc_duration(event) / self.cf_time)
+                        event_exceeds[key] = duration > pulseq_time
+                    else:
+                        event_exceeds[key] = False
+                exceeded = any(event_exceeds.values())
 
-                        # Add remaining delay to the new block
-                        delay = round_up_to_raster((ts - ts_offset) * self.cf_time, 5)
-                        delay_remain = delay - block_dur_rounded
-                        pulseq_events = self.__init_event_dict()
-                        pulseq_events['delay'] = pp.make_delay(delay_remain)
-                        ts_offset += round(block_dur_rounded  / self.cf_time)
+                if exceeded and any(pulseq_events[event.type] is not None for event in events):
+                    # Check if the block has to be split (Pulseq only allows one event per channel per block)
+                    # Gradients are either splitted or concatenated, depending on the presence of ADC, RF or Trigger events
+                    split = not (event_exceeds['rf'] or event_exceeds['adc'] or event_exceeds['trig'])
+                    if split: # split block
+                        split_pt = round(pulseq_time / self.delta_grad)
+                        pulseq_events_tmp = self.__init_event_dict()
+                        for key, pp_event in pulseq_events.items():
+                            if pp_event is None:
+                                continue
+                            pp_dur = round(pp.calc_duration(pp_event) / self.cf_time)
+                            if pp_dur > pulseq_time:
+                                if hasattr(pp_event, 'waveform') or hasattr(pp_event, 'amplitude'):
+                                    g_pre, g_post = self.__split_gradients(pp_event, split_pt, system)
+                                    pulseq_events_tmp[key] = g_post
+                                    pulseq_events[key] = g_pre
+                                else:
+                                    raise ValueError(f"Event with type {pp_event.type} in block with index {block.block_idx} "
+                                                        "cannot be split. Only gradients can be split.")
+                        pp_seq.add_block(*self.__extract_events(pulseq_events))
+                        pulseq_events = pulseq_events_tmp.copy()
+                        ts_offset = round(ts / self.delta_grad) * self.delta_grad
+                    else: # concatenate gradients
+                        for event in events:
+                            if pulseq_events[event.type] is not None:
+                                pp_event = pulseq_events[event.type]
+                                if event.type[0] == 'g':
+                                    g_conc = self.__make_pp_grad(event, pulseq_time, system)
+                                    if g_conc is not None:
+                                        g_wf = [waveform_from_seqblock(pp_event, system=system), waveform_from_seqblock(g_conc, system=system)]
+                                        len_wf = max([len(wf) for wf in g_wf])
+                                        g_wf = [np.concatenate([wf, np.zeros(len_wf - len(wf))]) for wf in g_wf]
+                                        g_wf = g_wf[0] + g_wf[1]
+                                        pulseq_events[event.type] = self.__make_arbitrary_grad(g_wf, event.channel, 0, system=system)
+                                    concat_g[event.type] = True
+                                else:
+                                    raise ValueError(f"Event with type {pp_event.type} in block with index {block.block_idx} "
+                                                        "cannot be concatenated. Only gradients can be concatenated.")
+                elif not exceeded: 
+                    # no split or concatenation needed, start new block
+                    block_dur = pp.calc_duration(*self.__extract_events(pulseq_events))
+                    block_dur_rounded = round_up_to_raster(pp.calc_duration(*self.__extract_events(pulseq_events)), 5)
+                    if abs(block_dur - block_dur_rounded) > 1e-7:
+                        pulseq_events['delay'] = pp.make_delay(block_dur_rounded)
+                    pp_seq.add_block(*self.__extract_events(pulseq_events))
+
+                    # Add remaining delay to the new block
+                    delay = round_up_to_raster((ts - ts_offset) * self.cf_time, 5)
+                    delay_remain = delay - block_dur_rounded
+                    pulseq_events = self.__init_event_dict()
+                    pulseq_events['delay'] = pp.make_delay(delay_remain)
+                    ts_offset += round(block_dur_rounded  / self.cf_time)
 
                 # add events to the block
                 for event in events:
