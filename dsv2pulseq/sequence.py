@@ -447,11 +447,11 @@ class Sequence():
         # Deep copy to avoid modifying original blocks or event lists
         block_list_shifted = copy.deepcopy(self.block_list)
 
-        grad_offset = 0
+        grad_offset = {'x': 0, 'y': 0, 'z': 0}
         for block in block_list_shifted:
             shifted_timestamps = {}
-            grad_ts = 0
-            grad_end_last = 0
+            grad_ts = {'x': 0, 'y': 0, 'z': 0}
+            grad_end_last = {'x': 0, 'y': 0, 'z': 0}
             grads = {'x': None, 'y': None, 'z': None}
 
             for ts_str in block.timestamps:
@@ -471,45 +471,38 @@ class Sequence():
                         shifted_timestamps.setdefault(new_ts, []).append(event)
 
                     elif event.type[0] == 'g':
-                        grad_start = ts
-                        grad_dur = event.duration + event.ramp_dn
-                        grad_end = ts + grad_dur
-
-                        if grad_start >= grad_end_last and grad_end > grad_offset:
-                            if grads['x'] is not None:
-                                for g in grads.values():
-                                    shifted_timestamps.setdefault(grad_ts, []).append(g)
-
-                            if grad_start < grad_offset:
-                                grad_start = grad_offset
-                                grad_dur = grad_end - grad_start
-
+                        for axis, g in grads.items():
+                            grad_start = max(ts, grad_offset[axis])
+                            grad_dur = event.duration + event.ramp_dn
+                            grad_end = ts + grad_dur
+                            grad_dur = grad_end - grad_start # correct if offset > start
                             shape_ix = slice((block.start_time + grad_start) // self.delta_grad,
                                             (block.start_time + grad_start + grad_dur) // self.delta_grad)
 
-                            for axis in grads:
-                                grads[axis] = Grad(axis, 0, grad_dur, grad_dur, 0, shape_ix)
+                            if grad_start >= grad_end_last[axis] and grad_end > grad_offset[axis]:
+                                if g is not None:
+                                    shifted_timestamps.setdefault(grad_ts[axis], []).append(g)
 
-                            grad_ts = grad_start
-                            grad_end_last = grad_end
+                                g = Grad(axis, 0, grad_dur, grad_dur, 0, shape_ix)
+                                if any(self.get_shape(g)):
+                                    grads[axis] = g
+                                    grad_ts[axis] = grad_start
+                                    grad_end_last[axis] = grad_end
 
-                        elif grad_end > grad_end_last:
-                            grad_dur_new = grads['x'].duration + grad_end - grad_end_last
-                            shape_end_new = grads['x'].shape_ix.stop + (grad_end - grad_end_last) // self.delta_grad
-
-                            for g in grads.values():
+                            elif grad_end > grad_end_last[axis]:
+                                grad_dur_new = g.duration + grad_end - grad_end_last[axis]
+                                shape_end_new = g.shape_ix.stop + (grad_end - grad_end_last[axis]) // self.delta_grad
                                 g.duration = g.ramp_up = grad_dur_new
                                 g.shape_ix = slice(g.shape_ix.start, shape_end_new)
-
-                            grad_end_last = grad_end
+                                grad_end_last[axis] = grad_end
 
                     else:
                         shifted_timestamps.setdefault(ts, []).append(event)
 
-            grad_offset = grad_end_last - block.block_duration # gradients can extend beyond the block duration
-            if grads['x'] is not None:
-                for g in grads.values():
-                    shifted_timestamps.setdefault(grad_ts, []).append(g)
+            for axis, g in grads.items():
+                grad_offset[axis] = grad_end_last[axis] - block.block_duration # gradients can extend beyond the block duration
+                if g is not None:
+                    shifted_timestamps.setdefault(grad_ts[axis], []).append(g)
 
             block.timestamps = dict(
                 sorted(((ts, evts) for ts, evts in shifted_timestamps.items()), key=lambda x: int(x[0]))
