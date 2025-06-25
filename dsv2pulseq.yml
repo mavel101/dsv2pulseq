@@ -8,5 +8,6 @@ dependencies:
     - matplotlib
     - pip:
         - pypulseq==1.4.2.post1
+        - ismrmrd==1.14.1
         - git+https://github.com/pehses/twixtools
         - git+https://github.com/mavel101/dsv2pulseq

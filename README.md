@@ -60,7 +60,7 @@ The data from the Pulseq sequence (IN_FILE_2) can be inserted into a raw data fi
 ```
 insert_twix_data.py IN_FILE_1 IN_FILE_2 -o OUT_FILE
 ```
-The merged output file (OUT_FILE) can be used for rectrospective reconstruction at the scanner.
+The merged output file (OUT_FILE) can be used for rectrospective reconstruction at the scanner. Alternatively the Pulseq data file can also be in the MRD format (requires ISMRMRD python package)
 
 ## References
 
