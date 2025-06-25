@@ -144,7 +144,8 @@ class Sequence():
 
     def set_shapes(self, shapes):
 
-        rf = shapes[0].values * np.exp(1j*np.deg2rad(shapes[1].values))
+        rfd = shapes[0].values * shapes[0].definitions.maxlimit / np.max(shapes[0].values)
+        rf = rfd * np.exp(1j*np.deg2rad(shapes[1].values))
         self.rf = rf
         self.gx = shapes[2].values
         self.gy = shapes[3].values
