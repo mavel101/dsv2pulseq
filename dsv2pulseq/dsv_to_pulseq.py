@@ -16,7 +16,7 @@ def main(args):
     # check input
     sfx = ['_INF', '_GRX', '_GRY', '_GRZ', '_RFD', '_RFP']
     for suffix in sfx:
-        if not os.path.isfile(args.in_file_prefix + suffix + '.dsv') or os.path.isfile(args.in_file_prefix + suffix + '.DSV'):
+        if not os.path.isfile(args.in_file_prefix + suffix + '.dsv'):
             raise OSError(f"DSV file {args.in_file_prefix + suffix + '.dsv'} does not exist.")
 
     seq = read_dsv(args.in_file_prefix, args.ref_volt, plot=False)
