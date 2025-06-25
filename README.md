@@ -51,6 +51,7 @@ Note that:
 - The Pulseq sequence has the same orientation as the original sequence in the physical/scanner coordinate system, when running the Pulseq interpreter in "XYZ in TRA" mode.
 - The Pulseq interpreter version 1.5.0 should be used, as the versions before contain a bug in setting the RF raster time correctly. 
 - RF and gradient waveforms might be slightly different compared to the original sequence due to limited numerical accuracy of the DSV files.
+- RF pulse values are on a 5us raster in the dsv files, which might be insufficient for pulses with rapidly varying phase
 
 ## Reconstruction of Pulseq data
 

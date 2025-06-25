@@ -267,7 +267,8 @@ class Sequence():
                                 else:
                                     raise ValueError(f"Event with type {pp_event.type} in block with index {block.block_idx} "
                                                         "cannot be split. Only gradients can be split.")
-                        pp_seq.add_block(*self.__extract_events(pulseq_events))
+                        if any(pulseq_events.values()):
+                            pp_seq.add_block(*self.__extract_events(pulseq_events))
                         pulseq_events = pulseq_events_tmp.copy()
                         ts_offset = round(ts / self.delta_grad) * self.delta_grad
                     else: # concatenate gradients
@@ -292,13 +293,15 @@ class Sequence():
                     block_dur_rounded = round_up_to_raster(pp.calc_duration(*self.__extract_events(pulseq_events)), 5)
                     if abs(block_dur - block_dur_rounded) > 1e-7:
                         pulseq_events['delay'] = pp.make_delay(block_dur_rounded)
-                    pp_seq.add_block(*self.__extract_events(pulseq_events))
+                    if any(pulseq_events.values()):
+                        pp_seq.add_block(*self.__extract_events(pulseq_events))
 
                     # Add remaining delay to the new block
-                    delay = round_up_to_raster((ts - ts_offset) * self.cf_time, 5)
+                    delay = round((ts - ts_offset) * self.cf_time, 5)
                     delay_remain = delay - block_dur_rounded
                     pulseq_events = self.__init_event_dict()
-                    pulseq_events['delay'] = pp.make_delay(delay_remain)
+                    if delay_remain > 0:
+                        pulseq_events['delay'] = pp.make_delay(delay_remain)
                     ts_offset += round(block_dur_rounded  / self.cf_time)
 
                 # add events to the block
@@ -317,13 +320,13 @@ class Sequence():
                                 pulseq_events[event.type] = g
                     elif event.type == 'adc':
                         event_del += self.adc_dead_time
-                        adc_dur = round_up_to_raster(event.duration * self.cf_time, 7) # ADCs can be on nanosecond raster
-                        adc_del = round_up_to_raster(event_del * self.cf_time, 6)
+                        adc_dur = round(event.duration * self.cf_time, 7) # ADCs can be on nanosecond raster
+                        adc_del = round(event_del * self.cf_time, 6)
                         adc = pp.make_adc(num_samples=event.samples, duration=adc_dur, delay=adc_del, freq_offset=event.freq, phase_offset=np.deg2rad(event.phase), system=system)
                         pulseq_events['adc'] = adc
                     elif event.type == 'trig':
-                        trig_dur = round_up_to_raster(event.duration * self.cf_time, 6)
-                        trig_del = round_up_to_raster(event_del * self.cf_time, 6)
+                        trig_dur = round(event.duration * self.cf_time, 6)
+                        trig_del = round(event_del * self.cf_time, 6)
                         if event.trig_type in self.trig_types:
                             trig = pp.make_digital_output_pulse(channel=self.trig_types[event.trig_type], duration=trig_dur, delay=trig_del, system=system)
                             pulseq_events['trig'] = trig
@@ -334,7 +337,7 @@ class Sequence():
                             logging.info(f'Unknown trigger type {event.trig_type} in block {block.block_idx} at time stamp {ts}. Replaced with delay.')
 
         # add last block
-        delay = round_up_to_raster((ts - ts_offset) * self.cf_time, 5)
+        delay = round((ts - ts_offset) * self.cf_time, 5)
         if self.__check_delay(pulseq_events, delay):
             pulseq_events['delay'] = pp.make_delay(delay)  # account for possible delay in last block
         if any(pulseq_events.values()):
@@ -367,7 +370,7 @@ class Sequence():
             """
 
             rf_sig = self.get_shape(rf_event)
-            rf_del = round_up_to_raster(event_del*self.cf_time, 6)
+            rf_del = round(event_del*self.cf_time, 6)
             rf = pp.make_arbitrary_rf(signal=rf_sig, flip_angle=1, delay=rf_del, freq_offset=rf_event.freq, phase_offset=np.deg2rad(rf_event.phase), return_gz=False, system=system)
             rf.signal = rf_sig * self.cf_rf # reset the signal as it gets scaled in make_arbitrary_rf
             return rf
@@ -382,7 +385,7 @@ class Sequence():
             return None
         else:
             g_wf = self.get_shape(grad_event) * self.cf_grad
-            g_del = round_up_to_raster(event_del*self.cf_time, 5)
+            g_del = round(event_del*self.cf_time, 5)
             return self.__make_arbitrary_grad(g_wf, grad_event.channel, delay=g_del, system=system)
 
     def __make_arbitrary_grad(self, wf, channel, delay, system):
