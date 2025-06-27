@@ -3,10 +3,24 @@
 import argparse
 import twixtools
 import ismrmrd
+import sys
 
 defaults = {'out_file': 'merged_rawdata.dat'}
 
-def main(args):
+def parse_arguments(argv=None):
+    parser = argparse.ArgumentParser(
+        description='Merge Pulseq data into Siemens raw data file.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument('in_file_1', type=str, help="Siemens raw data file acquired with original sequence.")
+    parser.add_argument('in_file_2', type=str, help="Pulseq raw data file.")
+    parser.add_argument('-o', '--out_file', type=str, help='Output Siemens raw data file name.')
+
+    parser.set_defaults(**defaults)
+    return parser.parse_args(argv)
+
+def main(argv=None):
+    args = parse_arguments(argv)
 
     if not args.in_file_1.endswith('.dat'):
         raise ValueError("Input file 1 must be a Siemens raw data file '.dat'.")
@@ -26,10 +40,10 @@ def main(args):
         n_acq2 = len(file2[-1]['mdb'])
 
     if n_acq1 != n_acq2:
-        raise ValueError(f"Files have different number of measurement data blocks. File 1: {len(file1[-1]['mdb'])}, File 2: {n_acq2}.")
+        raise ValueError(f"Files have different number of measurement data blocks. File 1: {n_acq1}, File 2: {n_acq2}.")
 
     print(f"Read and copy {n_acq1} measurement data blocks.")
-    for k,mdb in enumerate(file1[-1]['mdb']):
+    for k, mdb in enumerate(file1[-1]['mdb']):
         if not mdb.is_flag_set('ACQEND') and not mdb.is_flag_set('SYNCDATA'):
             mdb = mdb.convert_to_local()
             if use_mrd:
@@ -45,14 +59,4 @@ def main(args):
     twixtools.write_twix(file1, args.out_file, version_is_ve=True)
 
 if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser(description='Create Pulseq sequence file from dsv file.',
-                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('in_file_1', type=str, help="Siemens raw data file acquired with original sequence.")
-    parser.add_argument('in_file_2', type=str, help="Pulseq raw data file.")
-    parser.add_argument('-o', '--out_file', type=str, help='Output Siemens raw data file name. Default: merged_rawdata.dat')
-
-    parser.set_defaults(**defaults)
-    args = parser.parse_args()
-
-    main(args)
+    sys.exit(main())

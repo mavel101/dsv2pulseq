@@ -1,0 +1,32 @@
+[project]
+name = "dsv2pulseq"
+version = "1.0.0"
+description = "Create Pulseq sequences from dsv."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT License"}
+authors = [
+    { name = "Marten Veldmann", email = "marten.veldmann@dzne.de" }
+]
+keywords = ["pulseq", "dsv", "siemens", "mri"]
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "pypulseq==1.4.2.post1",
+    "ismrmrd==1.14.1",
+    "twixtools==0.23"
+]
+
+[project.urls]
+Homepage = "https://github.com/mavel101/dsv2pulseq"
+
+[project.scripts]
+dsv_to_pulseq = "dsv2pulseq.dsv_to_pulseq:main"
+insert_twix_data = "dsv2pulseq.insert_twix_data:main"
+
+[tool.setuptools]
+packages = ["dsv2pulseq"]
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"

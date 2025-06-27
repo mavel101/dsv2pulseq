@@ -6,8 +6,7 @@ RF values might be differing slightly compared to the original sequence, as the 
 
 ## Dependencies & Installation
 
-A Python environment with the dependencies can be installed with the provided yml file: `conda env create -f dsv2pulseq.yml`.
-Afterwards run: `pip install .`.  
+A Python environment with the package installed can be created with the provided yml file: `conda env create -f dsv2pulseq.yml`.
 Unittests can be run with `python -m unittest discover test/`. This includes testing, whether the conversion is successful for each dsv dataset in the folder "test/test_data".
 
 This package only depends on numpy and PyPulseq [1].
@@ -27,7 +26,7 @@ Example data "MiniFLASH.dsv" can be found in the test/test_data folder. These si
 
 The conversion can be started by running:  
 ```
-dsv_to_pulseq.py -o OUT_FILE -r REF_VOLT IN_FILE_PREFIX
+dsv_to_pulseq -o OUT_FILE -r REF_VOLT IN_FILE_PREFIX
 ```
 from the shell.
 
@@ -58,7 +57,7 @@ Note that:
 Data acquired with the converted Pulseq sequence cannot be easily reconstructed, as the scan headers containing the meta information are missing.
 The data from the Pulseq sequence (IN_FILE_2) can be inserted into a raw data file acquired with the original sequence (IN_FILE_1) using twixtools (see dependencies). If twixtools is installed, the following command will insert the data:
 ```
-insert_twix_data.py IN_FILE_1 IN_FILE_2 -o OUT_FILE
+insert_twix_data IN_FILE_1 IN_FILE_2 -o OUT_FILE
 ```
 The merged output file (OUT_FILE) can be used for rectrospective reconstruction at the scanner. Alternatively the Pulseq data file can also be in the MRD format (requires ISMRMRD python package)
 
