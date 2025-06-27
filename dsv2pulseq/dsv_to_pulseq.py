@@ -22,7 +22,7 @@ def main(args):
     seq = read_dsv(args.in_file_prefix, args.ref_volt, plot=False)
     seq.set_lead_hold_time(args.lead_time, args.hold_time)
     seq.set_adc_dead_time(args.adc_dead_time)
-    seq.make_pulseq_sequence(args.out_file, fov=args.fov)
+    seq.make_pulseq_sequence(args.out_file, fov=args.fov, highgain=args.highgain)
 
 if __name__ == "__main__":
 
@@ -35,6 +35,7 @@ if __name__ == "__main__":
     parser.add_argument('--hold_time', type=int, help='RF hold time [us] (minimum time from end of RF to end of event block).')
     parser.add_argument('--adc_dead_time', type=int, help='ADC dead time [us] (minimum time between start/end of ADC readout and next ADC or event block start/end).')
     parser.add_argument('--fov', type=float, nargs=3, help='Field of view [mm] in Pulseq file for x, y, z direction. default=[None, None, None]')
+    parser.add_argument('--highgain', action='store_true', help='Set receiver gain to high in Pulseq file.')
 
     parser.set_defaults(**defaults)
     args = parser.parse_args()

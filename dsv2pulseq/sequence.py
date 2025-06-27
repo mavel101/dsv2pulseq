@@ -184,7 +184,7 @@ class Sequence():
         """
         self.adc_dead_time = adc_dead_time
 
-    def make_pulseq_sequence(self, filename=None, fov=[None, None, None]):
+    def make_pulseq_sequence(self, filename=None, fov=[None, None, None], highgain=False):
         """
         Create a Pulseq file from the sequence object.
         Time tracking is always done in [us] (integers), 
@@ -217,6 +217,8 @@ class Sequence():
         pp_seq.set_definition('Name', os.path.basename(filename))
         if all(fov):
             pp_seq.set_definition("FOV", [fov[0]*1e-3, fov[1]*1e-3, fov[2]*1e-3])
+        if highgain:
+            pp_seq.set_definition("ReceiverGainHigh", 1)
 
         pulseq_events = self.__init_event_dict()
         ts_offset = 0
