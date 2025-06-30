@@ -4,9 +4,12 @@ Create Pulseq sequence files from Siemens dsv simulation files. The converter wa
 VB/VD files are not supported, as the simulator can not output RF phase data.  
 RF values might be differing slightly compared to the original sequence, as the dsv files contain RF values only on a 5us raster.
 
-## Dependencies & Installation
+## Installation
 
-A Python environment with the package installed can be created with the provided yml file: `conda env create -f dsv2pulseq.yml`.
+The package can be install with `pip install dsv2pulseq`.
+
+Alternatively, a Python environment with the package installed can be created with the provided yml file: `conda env create -f dsv2pulseq.yml`.
+
 Unittests can be run with `python -m unittest discover test/`. This includes testing, whether the conversion is successful for each dsv dataset in the folder "test/test_data".
 
 This package only depends on numpy and PyPulseq [1].
