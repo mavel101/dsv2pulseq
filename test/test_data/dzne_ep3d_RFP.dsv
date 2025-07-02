@@ -1,0 +1,37 @@
+; 
+; X:\n4\pkg\MrServers\MrImaging\seq\vx_ep3d\dzne_ep3d_RFP.dsv
+; 
+; Created by DSP-Simulator / V4.0 - release version (Build: Apr  9 2019)
+; 09:54:46 on Wednesday, July 02, 2025
+; 
+
+
+; This file includes the data for: RF Signal Phase (1. tx ch.)
+
+
+[FILETYPE]
+FORMAT=DSV_V0100
+
+[DEFINITIONS]
+TITLE=RF-Signal Phase (ch. 0, 1H, 297.2 MHz)
+SAMPLES=1523694     
+VERTUNITNAME=Degree
+HORIUNITNAME=µs
+HORIDELTA=5.000000
+VERTFACTOR=100000.000000
+MAXLIMIT=180.000000
+MINLIMIT=-180.000000
+DESCRIPTION=RF-Signal Phase (ch. 0, 1H, 297.2 MHz)   
+NUCLEUS=1H                                           
+NOMINALFREQUENCY=297180000                           
+; USERTAG                                            
+
+[FRAME]
+
+
+[VALUES]
+0
+0
+1523692
+
+;  end of graphic data file
