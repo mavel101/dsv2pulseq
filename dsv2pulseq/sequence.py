@@ -4,6 +4,7 @@ import time
 import copy
 from warnings import warn
 import logging
+from pprint import pformat
 import pypulseq as pp
 from dsv2pulseq.helper import round_up_to_raster, waveform_from_seqblock
 
@@ -24,7 +25,10 @@ class Block():
         self.timestamps = {}
 
     def __repr__(self):
-        return f"Block {self.block_idx} with duration {self.block_duration} us at start time {self.start_time} us with timestamps {self.timestamps}."
+        return (
+            f"Block {self.block_idx} with duration {self.block_duration} us at start time {self.start_time} us\n"
+            f"Timestamps:\n{pformat(self.timestamps, indent=2)}"
+    )
     
     def add_timestamp(self, ts):
         if not ts in self.timestamps:
@@ -57,6 +61,9 @@ class Block():
 
 class Rf():
 
+    def __repr__(self):
+        return f"RF (dur: {self.duration} us)"
+
     def __init__(self, duration, shape_ix):
         self.type = 'rf'
         self.duration = duration
@@ -70,6 +77,9 @@ class Rf():
     
 class Grad():
 
+    def __repr__(self):
+        return f"Grad {self.type} (amp: {self.amp} mT/m, dur: {self.duration} us, rut: {self.ramp_up} us, rdt: {self.ramp_dn} us)"
+
     def __init__(self, channel, amp, duration, ramp_up, ramp_dn, shape_ix):
         self.type = 'g' + channel 
         self.channel = channel
@@ -80,6 +90,9 @@ class Grad():
         self.shape_ix = shape_ix
 
 class Adc():
+
+    def __repr__(self):
+        return f"ADC (dur: {self.duration} us, samples: {self.samples})"
 
     def __init__(self, duration, samples):
         self.type = 'adc'
@@ -93,6 +106,9 @@ class Adc():
         self.phase = freq_phase[1]
 
 class Trig():
+
+    def __repr__(self):
+        return f"Trig (type: {self.trig_type}, dur: {self.duration} us)"
 
     def __init__(self, duration, trig_type):
         self.type = 'trig'
@@ -231,8 +247,6 @@ class Sequence():
         block_list = self.make_pulseq_block_list()
 
         for ix, block in enumerate(block_list):
-            if ix == 1:
-                pass
             block_offset = block_list[ix - 1].block_duration if ix > 0 else 0
             ts_offset -= block_offset # offset time if Siemens block is splitted
             for ts in block.timestamps:
@@ -488,10 +502,11 @@ class Sequence():
                             if grad_start >= grad_end_last[axis] and grad_end > grad_offset[axis]:
                                 if g is not None:
                                     shifted_timestamps.setdefault(grad_ts[axis], []).append(g)
+                                    grads[axis] = None
 
-                                g = Grad(axis, 0, grad_dur, grad_dur, 0, shape_ix)
-                                if any(self.get_shape(g)):
-                                    grads[axis] = g
+                                grad = Grad(axis, 0, grad_dur, grad_dur, 0, shape_ix)
+                                if any(self.get_shape(grad)):
+                                    grads[axis] = grad
                                     grad_ts[axis] = grad_start
                                     grad_end_last[axis] = grad_end
 
