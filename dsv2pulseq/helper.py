@@ -31,7 +31,7 @@ def waveform_from_seqblock(grad, system=None):
     else:
         waveform = grad.waveform
 
-    waveform = np.concatenate((np.zeros(int(grad.delay / system.grad_raster_time)), waveform))
+    waveform = np.concatenate((np.zeros(round(grad.delay / system.grad_raster_time)), waveform))
 
     return waveform
 
