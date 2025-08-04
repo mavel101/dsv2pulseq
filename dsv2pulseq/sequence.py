@@ -338,7 +338,8 @@ class Sequence():
                         event_del += self.adc_dead_time
                         adc_dur = round(event.duration * self.cf_time, 7) # ADCs can be on nanosecond raster
                         adc_del = round(event_del * self.cf_time, 6)
-                        adc = pp.make_adc(num_samples=event.samples, duration=adc_dur, delay=adc_del, freq_offset=event.freq, phase_offset=np.deg2rad(event.phase), system=system)
+                        adc_phs = np.deg2rad(event.phase % 360)
+                        adc = pp.make_adc(num_samples=event.samples, duration=adc_dur, delay=adc_del, freq_offset=event.freq, phase_offset=adc_phs, system=system)
                         pulseq_events['adc'] = adc
                     elif event.type == 'trig':
                         trig_dur = round(event.duration * self.cf_time, 6)
@@ -387,7 +388,8 @@ class Sequence():
 
             rf_sig = self.get_shape(rf_event)
             rf_del = round(event_del*self.cf_time, 6)
-            rf = pp.make_arbitrary_rf(signal=rf_sig, flip_angle=1, delay=rf_del, freq_offset=rf_event.freq, phase_offset=np.deg2rad(rf_event.phase), return_gz=False, system=system)
+            rf_phs = np.deg2rad(rf_event.phase % 360)
+            rf = pp.make_arbitrary_rf(signal=rf_sig, flip_angle=1, delay=rf_del, freq_offset=rf_event.freq, phase_offset=rf_phs, return_gz=False, system=system)
             rf.signal = rf_sig * self.cf_rf # reset the signal as it gets scaled in make_arbitrary_rf
             return rf
 
