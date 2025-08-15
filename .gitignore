@@ -132,3 +132,6 @@ dmypy.json
 .pyre/
 
 _version.py
+
+*.h5
+*.npz
