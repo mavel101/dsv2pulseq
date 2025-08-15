@@ -6,7 +6,12 @@ from warnings import warn
 import logging
 from pprint import pformat
 import pypulseq as pp
-from dsv2pulseq.helper import round_up_to_raster, waveform_from_seqblock
+from dsv2pulseq.helper import (
+    round_up_to_raster, 
+    round_to_raster, 
+    waveform_from_seqblock, 
+    resample_waveform
+)
 
 
 class Block():
@@ -200,7 +205,7 @@ class Sequence():
         """
         self.adc_dead_time = adc_dead_time
 
-    def make_pulseq_sequence(self, filename=None, fov=[None, None, None], highgain=False):
+    def make_pulseq_sequence(self, filename=None, fov=[None, None, None], highgain=False, ge=False):
         """
         Create a Pulseq file from the sequence object.
         Time tracking is always done in [us] (integers), 
@@ -222,12 +227,19 @@ class Sequence():
             max_slew=1e4,
             rf_raster_time=self.delta_rf * self.cf_time,
             grad_raster_time=self.delta_grad * self.cf_time,
+            block_duration_raster=self.delta_grad * self.cf_time,
+            adc_raster_time=1e-7,
             grad_unit='mT/m',
             slew_unit='mT/m/ms',
             rf_ringdown_time=self.rf_hold_time * self.cf_time,
             rf_dead_time=self.rf_lead_time * self.cf_time,
             adc_dead_time=self.adc_dead_time * self.cf_time
         )
+        if ge:
+            system.rf_raster_time = 2e-6
+            system.adc_raster_time = 2e-6
+            system.grad_raster_time = 4e-6
+            system.block_duration_raster = 4e-6
 
         pp_seq = pp.Sequence(system=system)
         pp_seq.set_definition('Name', os.path.basename(filename))
@@ -235,6 +247,9 @@ class Sequence():
             pp_seq.set_definition("FOV", [fov[0]*1e-3, fov[1]*1e-3, fov[2]*1e-3])
         if highgain:
             pp_seq.set_definition("ReceiverGainHigh", 1)
+
+        if ge:
+            pp_seq.add_block(pp.make_label("TRID", "SET", 1))
 
         pulseq_events = self.__init_event_dict()
         ts_offset = 0
@@ -270,6 +285,8 @@ class Sequence():
                     split = not (event_exceeds['rf'] or event_exceeds['adc'] or event_exceeds['trig'])
                     if split: # split block
                         split_pt = round(pulseq_time / self.delta_grad)
+                        if ge:
+                            split_pt = np.floor(self.cf_time * pulseq_time / system.grad_raster_time).astype(int)
                         pulseq_events_tmp = self.__init_event_dict()
                         for key, pp_event in pulseq_events.items():
                             if pp_event is None:
@@ -286,13 +303,16 @@ class Sequence():
                         if any(pulseq_events.values()):
                             pp_seq.add_block(*self.__extract_events(pulseq_events))
                         pulseq_events = pulseq_events_tmp.copy()
-                        ts_offset = round(ts / self.delta_grad) * self.delta_grad
+                        if ge:
+                            ts_offset += round(split_pt * system.grad_raster_time / self.cf_time)
+                        else:
+                            ts_offset += split_pt * self.delta_grad
                     else: # concatenate gradients
                         for event in events:
                             if pulseq_events[event.type] is not None:
                                 pp_event = pulseq_events[event.type]
                                 if event.type[0] == 'g':
-                                    g_conc = self.__make_pp_grad(event, pulseq_time, system)
+                                    g_conc = self.__make_pp_grad(event, pulseq_time, system, ge=ge)
                                     if g_conc is not None:
                                         g_wf = [waveform_from_seqblock(pp_event, system=system), waveform_from_seqblock(g_conc, system=system)]
                                         len_wf = max([len(wf) for wf in g_wf])
@@ -306,19 +326,19 @@ class Sequence():
                 elif not exceeded: 
                     # no split or concatenation needed, start new block
                     block_dur = pp.calc_duration(*self.__extract_events(pulseq_events))
-                    block_dur_rounded = round_up_to_raster(pp.calc_duration(*self.__extract_events(pulseq_events)), 5)
-                    if abs(block_dur - block_dur_rounded) > 1e-7:
+                    block_dur_rounded = round_up_to_raster(block_dur, system.block_duration_raster)
+                    if block_dur_rounded > 1e-7:
                         pulseq_events['delay'] = pp.make_delay(block_dur_rounded)
                     if any(pulseq_events.values()):
                         pp_seq.add_block(*self.__extract_events(pulseq_events))
 
                     # Add remaining delay to the new block
-                    delay = round((ts - ts_offset) * self.cf_time, 5)
+                    delay = round_to_raster((ts - ts_offset) * self.cf_time, system.block_duration_raster)
                     delay_remain = delay - block_dur_rounded
                     pulseq_events = self.__init_event_dict()
                     if delay_remain > 0:
                         pulseq_events['delay'] = pp.make_delay(delay_remain)
-                    ts_offset += round(block_dur_rounded  / self.cf_time)
+                    ts_offset += round(block_dur_rounded / self.cf_time)
 
                 # add events to the block
                 for event in events:
@@ -327,23 +347,31 @@ class Sequence():
                         raise ValueError("Negative event delay encountered.")
                     if event.type == 'rf':
                         event_del += self.rf_lead_time
-                        rf = self.__make_pp_rf(event, event_del, system)
+                        rf = self.__make_pp_rf(event, event_del, system, ge=ge)
                         pulseq_events['rf'] = rf
                     elif event.type in ['gx', 'gy', 'gz']:
                         if not concat_g[event.type]:
-                            g = self.__make_pp_grad(event, event_del, system)
+                            g = self.__make_pp_grad(event, event_del, system, ge=ge)
                             if g is not None:
                                 pulseq_events[event.type] = g
                     elif event.type == 'adc':
                         event_del += self.adc_dead_time
-                        adc_dur = round(event.duration * self.cf_time, 7) # ADCs can be on nanosecond raster
-                        adc_del = round(event_del * self.cf_time, 6)
+                        adc_dur = round_to_raster(event.duration * self.cf_time, system.adc_raster_time) # ADCs can be on nanosecond raster
+                        adc_del = round_to_raster(event_del * self.cf_time, 1e-6)
                         adc_phs = np.deg2rad(event.phase % 360)
+                        if ge:
+                            dwell_us = round(event.duration / event.samples, 1)
+                            adc_raster_us = round(system.adc_raster_time / self.cf_time)
+                            if dwell_us % adc_raster_us != 0:
+                                dwell_new = round(dwell_us / adc_raster_us) * adc_raster_us
+                                adc_dur = 1e-6 * dwell_new * event.samples
+                                logging.warning(f"Block {block.block_idx}: ADC dwell time {dwell_us} us of ADC is not a multiple "
+                                                f"of the ADC raster time {system.adc_raster_time / self.cf_time} us. Rounding to {dwell_new} us.")
                         adc = pp.make_adc(num_samples=event.samples, duration=adc_dur, delay=adc_del, freq_offset=event.freq, phase_offset=adc_phs, system=system)
                         pulseq_events['adc'] = adc
                     elif event.type == 'trig':
-                        trig_dur = round(event.duration * self.cf_time, 6)
-                        trig_del = round(event_del * self.cf_time, 6)
+                        trig_dur = round_to_raster(event.duration * self.cf_time, 1e-6)
+                        trig_del = round_to_raster(event_del * self.cf_time, 1e-6)
                         if event.trig_type in self.trig_types:
                             trig = pp.make_digital_output_pulse(channel=self.trig_types[event.trig_type], duration=trig_dur, delay=trig_del, system=system)
                             pulseq_events['trig'] = trig
@@ -354,17 +382,21 @@ class Sequence():
                             logging.info(f'Unknown trigger type {event.trig_type} in block {block.block_idx} at time stamp {ts}. Replaced with delay.')
 
         # add last block
-        delay = round((ts - ts_offset) * self.cf_time, 5)
+        delay = round_to_raster((ts - ts_offset) * self.cf_time, system.block_duration_raster)
         if self.__check_delay(pulseq_events, delay):
             pulseq_events['delay'] = pp.make_delay(delay)  # account for possible delay in last block
+        block_dur = pp.calc_duration(*self.__extract_events(pulseq_events))
+        block_dur_rounded = round_up_to_raster(block_dur, system.block_duration_raster)
+        if block_dur_rounded > 1e-7:
+            pulseq_events['delay'] = pp.make_delay(block_dur_rounded)
         if any(pulseq_events.values()):
             pp_seq.add_block(*self.__extract_events(pulseq_events))
 
         # check timing of the sequence
-        # set raster time to 1us for timing check, as otherwise ADC delays will throw errors
+        # set rf raster time to 1us for timing check, as otherwise ADC delays will throw errors
+        # this does not set the raster time in the definitions
         pp_seq.system.rf_raster_time = 1e-6
         ok, error_report = pp_seq.check_timing()
-        pp_seq.system.rf_raster_time = self.delta_rf * self.cf_time
         if not ok:
             warn(f"PyPulseq timing check failed with {len(error_report)} errors.")
         
@@ -381,19 +413,23 @@ class Sequence():
     def __extract_events(self, event_dict):
         return [event for event in event_dict.values() if event is not None]
 
-    def __make_pp_rf(self, rf_event, event_del, system):
+    def __make_pp_rf(self, rf_event, event_del, system, ge=False):
             """
             Make a Pulseq RF event
             """
 
             rf_sig = self.get_shape(rf_event)
-            rf_del = round(event_del*self.cf_time, 6)
+            rf_del = round_to_raster(event_del*self.cf_time, 1e-6)
+            if ge:
+                raster_old = self.delta_rf * self.cf_time
+                rf_sig = resample_waveform(rf_sig, raster_old, system.rf_raster_time, method='linear')
+                rf_del = round_to_raster(event_del*self.cf_time, system.rf_raster_time)
             rf_phs = np.deg2rad(rf_event.phase % 360)
             rf = pp.make_arbitrary_rf(signal=rf_sig, flip_angle=1, delay=rf_del, freq_offset=rf_event.freq, phase_offset=rf_phs, return_gz=False, system=system)
             rf.signal = rf_sig * self.cf_rf # reset the signal as it gets scaled in make_arbitrary_rf
             return rf
 
-    def __make_pp_grad(self, grad_event, event_del, system):
+    def __make_pp_grad(self, grad_event, event_del, system, ge=False):
         """
         Make a Pulseq gradient event
         """
@@ -403,7 +439,10 @@ class Sequence():
             return None
         else:
             g_wf = self.get_shape(grad_event) * self.cf_grad
-            g_del = round(event_del*self.cf_time, 5)
+            if ge:
+                raster_old = self.delta_grad * self.cf_time
+                g_wf = resample_waveform(g_wf, raster_old, system.grad_raster_time, method='linear')
+            g_del = round_to_raster(event_del*self.cf_time, system.grad_raster_time)
             return self.__make_arbitrary_grad(g_wf, grad_event.channel, delay=g_del, system=system)
 
     def __make_arbitrary_grad(self, wf, channel, delay, system):
