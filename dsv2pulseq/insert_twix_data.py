@@ -36,11 +36,11 @@ def main(argv=None):
         if n_acq1 - n_acq2 == 1:
             n_acq2 += 1  # ACQEND is usually not converted to MRD
     else:
-        file2 = twixtools.read_twix(args.in_file_2, keep_syncdata=True, keep_acqend=True)
+        file2 = twixtools.read_twix(args.in_file_2, parse_pmu=False, keep_syncdata=False, keep_acqend=True)
         n_acq2 = len(file2[-1]['mdb'])
 
     if n_acq1 != n_acq2:
-        raise ValueError(f"Files have different number of measurement data blocks. File 1: {n_acq1}, File 2: {n_acq2}.")
+        print(f"WARNING: Files have different number of measurement data blocks. File 1: {n_acq1}, File 2: {n_acq2}.")
 
     print(f"Read and copy {n_acq1} measurement data blocks.")
     for k, mdb in enumerate(file1[-1]['mdb']):
