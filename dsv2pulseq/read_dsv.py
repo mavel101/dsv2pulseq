@@ -99,12 +99,23 @@ def check_dsv(file_prefix1, file_prefix2, time_shift=20):
         seq1.adc = None
         seq2.adc = None
 
+    if os.path.exists(file_prefix1 + "_NC1.dsv") and os.path.exists(file_prefix2 + "_NC1.dsv"):
+        nc1_dsv = DSVFile(file_prefix1 + "_NC1.dsv")
+        nc2_dsv = DSVFile(file_prefix2 + "_NC1.dsv")
+        nc_delta = nc1_dsv.definitions.horidelta
+        seq1.nc1 = nc1_dsv.values
+        seq2.nc1 = nc2_dsv.values
+    else:
+        seq1.nc1 = None
+        seq2.nc1 = None
+
     rfd1 = abs(seq1.rf)
     rfp1 = np.angle(seq1.rf)
     grx1 = seq1.gx
     gry1 = seq1.gy
     grz1 = seq1.gz
     adc1 = seq1.adc
+    nco1 = seq1.nc1
 
     rfd2 = abs(seq2.rf)
     rfp2 = np.angle(seq2.rf)
@@ -112,6 +123,7 @@ def check_dsv(file_prefix1, file_prefix2, time_shift=20):
     gry2 = seq2.gy
     grz2 = seq2.gz
     adc2 = seq2.adc
+    nco2 = seq2.nc1
 
     shift_rf = int(time_shift / seq1.delta_rf)
     shift_grad = int(time_shift / seq1.delta_grad)
@@ -127,13 +139,25 @@ def check_dsv(file_prefix1, file_prefix2, time_shift=20):
         subplots = 6
     else:
         subplots = 5
+    if nco1 is not None and nco2 is not None:
+        shift_nco = int(time_shift / nc_delta)
+        nco2 = nco2[shift_nco:-shift_nco]
+        subplots += 1
+    else:
+        nco1 = None
+        nco2 = None
 
     len_rf = min(len(rfd1), len(rfd2))
     len_gx = min(len(grx1), len(grx2))
     len_gy = min(len(gry1), len(gry2))
     len_gz = min(len(grz1), len(grz2))
+    plot_adc = plot_nco = False
     if adc1 is not None and adc2 is not None:
         len_adc = min(len(adc1), len(adc2))
+        plot_adc = True
+    if nco1 is not None and nco2 is not None:
+        len_nco = min(len(nco1), len(nco2))
+        plot_nco = True
 
     # Plot sequence 1
     n_subplots = subplots  # 5 or 6
@@ -154,10 +178,14 @@ def check_dsv(file_prefix1, file_prefix2, time_shift=20):
     plt.subplot(n_subplots, 1, 5)
     plt.plot(grz1)
     plt.title("GZ")
-    if n_subplots == 6:
+    if plot_adc:
         plt.subplot(n_subplots, 1, 6)
         plt.plot(adc1)
         plt.title("ADC")
+    if plot_nco:
+        plt.subplot(n_subplots, 1, n_subplots)
+        plt.plot(nco1)
+        plt.title("NC1")
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     # Plot sequence 2
@@ -178,10 +206,14 @@ def check_dsv(file_prefix1, file_prefix2, time_shift=20):
     plt.subplot(n_subplots, 1, 5)
     plt.plot(grz2)
     plt.title("GZ")
-    if n_subplots == 6:
+    if plot_adc:
         plt.subplot(n_subplots, 1, 6)
         plt.plot(adc2)
         plt.title("ADC")
+    if plot_nco:
+        plt.subplot(n_subplots, 1, n_subplots)
+        plt.plot(nco2)
+        plt.title("NC1")
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     # Plot difference
@@ -202,10 +234,14 @@ def check_dsv(file_prefix1, file_prefix2, time_shift=20):
     plt.subplot(n_subplots, 1, 5)
     plt.plot(grz1[:len_gz] - grz2[:len_gz])
     plt.title("GZ")
-    if n_subplots == 6:
+    if plot_adc:
         plt.subplot(n_subplots, 1, 6)
         plt.plot(adc1[:len_adc] - adc2[:len_adc])
         plt.title("ADC")
+    if plot_nco:
+        plt.subplot(n_subplots, 1, n_subplots)
+        plt.plot(nco1[:len_nco] - nco2[:len_nco])
+        plt.title("NC1")
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     plt.show()
