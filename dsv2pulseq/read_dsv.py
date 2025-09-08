@@ -125,24 +125,26 @@ def check_dsv(file_prefix1, file_prefix2, time_shift=20):
     adc2 = seq2.adc
     nco2 = seq2.nc1
 
-    shift_rf = int(time_shift / seq1.delta_rf)
-    shift_grad = int(time_shift / seq1.delta_grad)
-
-    rfd2 = rfd2[shift_rf:-shift_rf]
-    rfp2 = rfp2[shift_rf:-shift_rf]
-    grx2 = grx2[shift_grad:-shift_grad]
-    gry2 = gry2[shift_grad:-shift_grad]
-    grz2 = grz2[shift_grad:-shift_grad]
+    if time_shift > 0:
+        shift_rf = int(time_shift / seq1.delta_rf)
+        shift_grad = int(time_shift / seq1.delta_grad)
+        rfd2 = rfd2[shift_rf:-shift_rf]
+        rfp2 = rfp2[shift_rf:-shift_rf]
+        grx2 = grx2[shift_grad:-shift_grad]
+        gry2 = gry2[shift_grad:-shift_grad]
+        grz2 = grz2[shift_grad:-shift_grad]
     if adc1 is not None and adc2 is not None:
-        shift_adc = int(time_shift / adc_delta)
-        adc2 = adc2[shift_adc:-shift_adc]
         subplots = 6
+        if time_shift > 0:
+            shift_adc = int(time_shift / adc_delta)
+            adc2 = adc2[shift_adc:-shift_adc]
     else:
         subplots = 5
     if nco1 is not None and nco2 is not None:
-        shift_nco = int(time_shift / nc_delta)
-        nco2 = nco2[shift_nco:-shift_nco]
         subplots += 1
+        if time_shift > 0:
+            shift_nco = int(time_shift / nc_delta)
+            nco2 = nco2[shift_nco:-shift_nco]
     else:
         nco1 = None
         nco2 = None
