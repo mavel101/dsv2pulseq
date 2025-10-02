@@ -54,9 +54,10 @@ def read_dsv_inf(file, seq):
                     freq_phase = [freq, phase]
                 if line[ix[4]+1:ix[5]].strip():
                     adc_str = line[ix[4]+1:ix[5]].strip()
-                    adc_samples = float(adc_str[adc_str.rfind(':')+1:adc_str.rfind('/')].strip())
-                    adc_dur = float(adc_str[adc_str.rfind('/')+1:].strip())
-                    if "VOP_READOUT" not in adc_str: # pTx RX events during RFs are not ADCs
+                    sample_str = adc_str[adc_str.rfind(':')+1:adc_str.rfind('/')].strip()
+                    if "VOP_READOUT" not in adc_str and "SMD" not in sample_str: # pTx RX events during RFs are not ADCs
+                        adc_samples = float(sample_str)
+                        adc_dur = float(adc_str[adc_str.rfind('/')+1:].strip())
                         block.add_adc(adc_dur, adc_samples, ts)
                 if line[ix[5]+1:ix[6]].strip():
                     gp_str = line[ix[5]+1:ix[6]].strip()
