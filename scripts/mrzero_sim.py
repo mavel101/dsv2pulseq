@@ -86,7 +86,7 @@ if insert_raw:
 
     nc = raw_data[-1]['mdb'][0].data.shape[0]
     if nc != signal_numpy_scaled.shape[1]:
-        print(f"Number of coils {nc} in raw data file does not match simulated coils {signal_numpy_scaled.shape[0]}.")
+        print(f"Number of coils {nc} in raw data file does not match simulated coils {signal_numpy_scaled.shape[1]}.")
 
     sample_ix = 0
     for k, mdb in enumerate(raw_data[-1]['mdb']):
