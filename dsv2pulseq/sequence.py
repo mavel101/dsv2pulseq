@@ -259,7 +259,7 @@ class Sequence():
             return
 
         # Shift RF and ADC timestamps to account for lead and dead times
-        block_list = self.make_pulseq_block_list()
+        block_list, ts_shifts = self.make_pulseq_block_list()
 
         for ix, block in enumerate(block_list):
             block_offset = block_list[ix - 1].block_duration if ix > 0 else 0
@@ -346,7 +346,7 @@ class Sequence():
                     if event_del < 0:
                         raise ValueError("Negative event delay encountered.")
                     if event.type == 'rf':
-                        event_del += self.rf_lead_time
+                        event_del += ts_shifts['rf']
                         rf = self.__make_pp_rf(event, event_del, system, ge=ge)
                         pulseq_events['rf'] = rf
                     elif event.type in ['gx', 'gy', 'gz']:
@@ -355,7 +355,7 @@ class Sequence():
                             if g is not None:
                                 pulseq_events[event.type] = g
                     elif event.type == 'adc':
-                        event_del += self.adc_dead_time
+                        event_del += ts_shifts['adc']
                         adc_dur = round_to_raster(event.duration * self.cf_time, system.adc_raster_time) # ADCs can be on nanosecond raster
                         adc_del = round_to_raster(event_del * self.cf_time, 1e-6)
                         adc_phs = np.deg2rad(event.phase % 360)
@@ -508,6 +508,10 @@ class Sequence():
         # Deep copy to avoid modifying original blocks or event lists
         block_list_shifted = copy.deepcopy(self.block_list)
 
+        # shift by a minimum of 2*delta_grad as gradients often end before RF and ADC objects
+        # which leads to gradient waveforms containing only one point
+        ts_shift = {'rf': max(self.rf_lead_time, 2*self.delta_grad), 'adc': max(self.adc_dead_time, 2*self.delta_grad)}
+
         grad_offset = {'x': 0, 'y': 0, 'z': 0}
         for block in block_list_shifted:
             shifted_timestamps = {}
@@ -524,11 +528,11 @@ class Sequence():
 
                 for event in events:
                     if event.type == 'rf':
-                        new_ts = ts - self.rf_lead_time
+                        new_ts = ts - ts_shift['rf']
                         shifted_timestamps.setdefault(new_ts, []).append(event)
 
                     elif event.type == 'adc':
-                        new_ts = ts - self.adc_dead_time
+                        new_ts = ts - ts_shift['adc']
                         shifted_timestamps.setdefault(new_ts, []).append(event)
 
                     elif event.type[0] == 'g':
@@ -570,4 +574,4 @@ class Sequence():
                 sorted(((ts, evts) for ts, evts in shifted_timestamps.items()), key=lambda x: int(x[0]))
             )
 
-        return block_list_shifted
+        return block_list_shifted, ts_shift
