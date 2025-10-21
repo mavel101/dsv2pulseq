@@ -27,7 +27,7 @@ def parse_arguments(argv=None):
     parser.add_argument('--adc_dead_time', type=int, help='ADC dead time [us].')
     parser.add_argument('--fov', type=float, nargs=3, help='Field of view [mm] for x, y, z.')
     parser.add_argument('--highgain', action='store_true', help='Set receiver gain to high.')
-    parser.add_argument('--ge', action='store_true', help='Convert sequence to GE.')
+    # parser.add_argument('--ge', action='store_true', help='Convert sequence to GE.')
 
     parser.set_defaults(**defaults)
     return parser.parse_args(argv)
@@ -45,7 +45,7 @@ def main(argv=None):
     seq = read_dsv(args.in_file_prefix, args.ref_volt, plot=False)
     seq.set_lead_hold_time(args.lead_time, args.hold_time)
     seq.set_adc_dead_time(args.adc_dead_time)
-    seq.make_pulseq_sequence(args.out_file, fov=args.fov, highgain=args.highgain, ge=args.ge)
+    seq.make_pulseq_sequence(args.out_file, fov=args.fov, highgain=args.highgain, ge=False)
 
 if __name__ == "__main__":
     sys.exit(main())
