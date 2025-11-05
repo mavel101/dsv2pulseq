@@ -10,7 +10,8 @@ from dsv2pulseq.helper import (
     round_up_to_raster, 
     round_to_raster, 
     waveform_from_seqblock, 
-    resample_waveform
+    resample_waveform,
+    trim_waveform
 )
 
 
@@ -437,14 +438,20 @@ class Sequence():
         if grad_event.duration == 0 and grad_event.ramp_up == 0:
             # zero duration gradient
             return None
-        else:
-            g_wf = self.get_shape(grad_event) * self.cf_grad
-            if ge:
-                raster_old = self.delta_grad * self.cf_time
-                g_wf = resample_waveform(g_wf, raster_old, system.grad_raster_time, method='linear')
-            g_del = round_to_raster(event_del*self.cf_time, system.grad_raster_time)
-            return self.__make_arbitrary_grad(g_wf, grad_event.channel, delay=g_del, system=system)
+        
+        # waveform
+        g_wf = self.get_shape(grad_event) * self.cf_grad
+        if ge:
+            raster_old = self.delta_grad * self.cf_time
+            g_wf = resample_waveform(g_wf, raster_old, system.grad_raster_time, method='linear')
+        g_wf_trimmed, leading_zeros = trim_waveform(g_wf)
 
+        # delay
+        event_del = event_del * self.cf_time + leading_zeros * system.grad_raster_time
+        g_del = round_to_raster(event_del, system.grad_raster_time)
+
+        return self.__make_arbitrary_grad(g_wf_trimmed, grad_event.channel, delay=g_del, system=system)
+        
     def __make_arbitrary_grad(self, wf, channel, delay, system):
         
         if len(wf) > 1:

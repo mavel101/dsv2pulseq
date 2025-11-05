@@ -5,4 +5,4 @@ dependencies:
     - python=3.10
     - pip
     - pip:
-        - git+https://github.com/mavel101/dsv2pulseq
+        - dsv2pulseq

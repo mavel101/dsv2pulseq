@@ -108,3 +108,23 @@ def resample_waveform(waveform, old_raster, new_raster, method='linear'):
     new_waveform = interp_func(new_time)
 
     return new_waveform
+
+def trim_waveform(waveform):
+    """
+    Trim leading/trailing zeros
+
+    Parameters:
+        waveform (np.ndarray): 1D nominal waveform
+
+    Returns:
+        trimmed_waveform (np.ndarray): waveform without leading/trailing zeros
+        leading_zeros (int): number of leading zeros
+    """
+    waveform = np.asarray(waveform)
+
+    # Trim leading/trailing zeros
+    non_zero_indices = np.where(np.abs(waveform) > 0)[0]
+    leading_zeros = non_zero_indices[0]
+    trimmed_waveform = waveform[non_zero_indices[0]:non_zero_indices[-1]+1]
+
+    return trimmed_waveform, leading_zeros
