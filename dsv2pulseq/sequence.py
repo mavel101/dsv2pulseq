@@ -14,6 +14,28 @@ from dsv2pulseq.helper import (
     trim_waveform
 )
 
+COUNTER_MAP = {
+    "Line": "LIN",
+    "Seg": "SEG",
+    "Repetition": "REP",
+    "Average": "AVG",
+    "Set": "SET",
+    "Echo": "ECO",
+    "Phase": "PHS",
+    "Partition": "PAR",
+    # "Acquisition": "ACQ", # not yet supported by latest Pypulseq release (1.4.2.post1)
+    "Slice": "SLC",
+}
+
+FLAG_MAP = {
+    'RTFEEDBACK': 'NAV',
+    # 'OFFLINE': 'OFF', # not yet supported by latest Pypulseq release (1.4.2.post1)
+    'PHASCOR': 'NAV',
+    'PATREFSCAN': 'REF',
+    'PATREFANDIMASCAN': 'IMA',
+    'REFLECT': 'REV',
+    'NOISEADJSCAN': 'NOISE',
+}
 
 class Block():
     """
@@ -98,12 +120,14 @@ class Grad():
 class Adc():
 
     def __repr__(self):
-        return f"ADC (dur: {self.duration} us, samples: {self.samples})"
+        return f"ADC (dur: {self.duration} us, samples: {self.samples}, counters: {self.counters}, flags: {self.flags})"
 
     def __init__(self, duration, samples):
         self.type = 'adc'
         self.duration = duration
         self.samples = samples
+        self.counters = {}
+        self.flags = []
         self.freq = 0
         self.phase = 0
 
@@ -206,7 +230,7 @@ class Sequence():
         """
         self.adc_dead_time = adc_dead_time
 
-    def make_pulseq_sequence(self, filename=None, fov=[None, None, None], highgain=False, ge=False):
+    def make_pulseq_sequence(self, filename=None, fov=[None, None, None], highgain=False, add_labels=False, ge=False):
         """
         Create a Pulseq file from the sequence object.
         Time tracking is always done in [us] (integers), 
@@ -262,6 +286,7 @@ class Sequence():
         # Shift RF and ADC timestamps to account for lead and dead times
         block_list, ts_shifts = self.make_pulseq_block_list()
 
+        labels = []
         for ix, block in enumerate(block_list):
             block_offset = block_list[ix - 1].block_duration if ix > 0 else 0
             ts_offset -= block_offset # offset time if Siemens block is splitted
@@ -302,7 +327,7 @@ class Sequence():
                                     raise ValueError(f"Event with type {pp_event.type} in block with index {block.block_idx} "
                                                         "cannot be split. Only gradients can be split.")
                         if any(pulseq_events.values()):
-                            pp_seq.add_block(*self.__extract_events(pulseq_events))
+                            pp_seq.add_block(*self.__extract_events(pulseq_events), *labels)
                         pulseq_events = pulseq_events_tmp.copy()
                         if ge:
                             ts_offset += round(split_pt * system.grad_raster_time / self.cf_time)
@@ -331,7 +356,7 @@ class Sequence():
                     if block_dur_rounded > 1e-7:
                         pulseq_events['delay'] = pp.make_delay(block_dur_rounded)
                     if any(pulseq_events.values()):
-                        pp_seq.add_block(*self.__extract_events(pulseq_events))
+                        pp_seq.add_block(*self.__extract_events(pulseq_events), *labels)
 
                     # Add remaining delay to the new block
                     delay = round_to_raster((ts - ts_offset) * self.cf_time, system.block_duration_raster)
@@ -370,6 +395,8 @@ class Sequence():
                                                 f"of the ADC raster time {system.adc_raster_time / self.cf_time} us. Rounding to {dwell_new} us.")
                         adc = pp.make_adc(num_samples=event.samples, duration=adc_dur, delay=adc_del, freq_offset=event.freq, phase_offset=adc_phs, system=system)
                         pulseq_events['adc'] = adc
+                        if add_labels:
+                            labels = self.__make_labels(event)
                     elif event.type == 'trig':
                         trig_dur = round_to_raster(event.duration * self.cf_time, 1e-6)
                         trig_del = round_to_raster(event_del * self.cf_time, 1e-6)
@@ -391,7 +418,7 @@ class Sequence():
         if block_dur_rounded > 1e-7:
             pulseq_events['delay'] = pp.make_delay(block_dur_rounded)
         if any(pulseq_events.values()):
-            pp_seq.add_block(*self.__extract_events(pulseq_events))
+            pp_seq.add_block(*self.__extract_events(pulseq_events), *labels)
 
         # check timing of the sequence
         # set rf raster time to 1us for timing check, as otherwise ADC delays will throw errors
@@ -496,6 +523,28 @@ class Sequence():
         else:
             return False
     
+    def __make_labels(self, adc_event):
+        """
+        Create labels from counters and flags
+        """
+        labels = []
+
+        counters = adc_event.counters
+        flags = adc_event.flags
+
+        for name, value in counters.items():
+            counter_name = COUNTER_MAP.get(name)
+            if counter_name is not None:
+                labels.append(pp.make_label(counter_name, "SET", value))
+
+        for flag, flag_name in FLAG_MAP.items():
+            if flag in flags:
+                labels.append(pp.make_label(flag_name, "SET", 1))
+            else:
+                labels.append(pp.make_label(flag_name, "SET", 0))
+
+        return labels
+
     def make_pulseq_block_list(self):
         """
         Restructures the block list to simplify writing the Pulseq file. This includes:

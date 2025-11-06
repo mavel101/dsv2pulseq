@@ -2,6 +2,43 @@
 Read a dsv INF file and append blocks to sequence
 """
 
+import re
+
+FLAG_BITS = {
+    'ACQEND': 0,  # last scan
+    'RTFEEDBACK': 1,  # Realtime feedback scan
+    'HPFEEDBACK': 2,  # High perfomance feedback scan
+    'ONLINE': 3,  # processing should be done online
+    'OFFLINE': 4,  # processing should be done offline
+    'SYNCDATA': 5,  # readout contains synchroneous data
+    'noname6': 6,
+    'noname7': 7,
+    'LASTSCANINCONCAT': 8,  # Flag for last scan in concatination
+    'noname9': 9,
+    'RAWDATACORRECTION': 10,  # Correct with the rawdata corr. factor
+    'LASTSCANINMEAS': 11,  # Flag for last scan in measurement
+    'SCANSCALEFACTOR': 12,  # Flag for scan specific additional scale
+    '2NDHADAMARPULSE': 13,  # 2nd RF exitation of HADAMAR
+    'REFPHASESTABSCAN': 14,  # reference phase stabilization scan
+    'PHASESTABSCAN': 15,  # phase stabilization scan
+    'D3FFT': 16,  # execute 3D FFT
+    'SIGNREV': 17,  # sign reversal
+    'PHASEFFT': 18,  # execute phase fft
+    'SWAPPED': 19,  # swapped phase/readout direction
+    'POSTSHAREDLINE': 20,  # shared line
+    'PHASCOR': 21,  # phase correction data
+    'PATREFSCAN': 22,  # additional scan for PAT ref line/partition
+    'PATREFANDIMASCAN': 23,  # PAT ref that is also used as image scan
+    'REFLECT': 24,  # reflect line
+    'NOISEADJSCAN': 25,  # noise adjust scan
+    'SHARENOW': 26,  # lines may be shared between e.g. phases
+    'LASTMEASUREDLINE': 27,  # indicates last meas line of e.g. phases
+    'FIRSTSCANINSLICE': 28,  # first scan in slice; req for timestamps
+    'LASTSCANINSLICE': 29,  # last scan in slice; req for timestamps
+    'TREFFECTIVEBEGIN': 30,  # indicates the TReff begin (triggered)
+    'TREFFECTIVEEND': 31,  # indicates the TReff end (triggered)
+}
+
 def find_char(s, ch):
     return [i for i, ltr in enumerate(s) if ltr == ch]
 
@@ -13,6 +50,12 @@ def read_dsv_inf(file, seq):
 
     delta_rf = seq.delta_rf
     delta_grad = seq.delta_grad
+
+    counter_pattern = r"sLC\.ush(\w+)\s*:\s*(\d+)"
+    flag_pattern = r"aulEvalInfoMask0\s*:\s*(0x[0-9A-Fa-f]+)"
+    adc_time_pattern = r"MeasHeader\s+(\d+)"
+
+    counters_flags = []
 
     with open(file, 'r') as f:
         line_ix = float('inf')
@@ -39,6 +82,8 @@ def read_dsv_inf(file, seq):
                 block.add_timestamp(ts)
 
                 if ts != ts_old and freq_phase is not None:
+                    # NCO (freq/phase) is independent event in Siemens seq, but not in Pulseq
+                    # Has to be connected to either RF or ADC event
                     block.set_freqphase(freq_phase, ts_old)
                     freq_phase = None
 
@@ -55,7 +100,7 @@ def read_dsv_inf(file, seq):
                 if line[ix[4]+1:ix[5]].strip():
                     adc_str = line[ix[4]+1:ix[5]].strip()
                     sample_str = adc_str[adc_str.rfind(':')+1:adc_str.rfind('/')].strip()
-                    if "VOP_READOUT" not in adc_str and "SMD" not in sample_str: # pTx RX events during RFs are not ADCs
+                    if 'VOP_READOUT' not in adc_str and 'SMD' not in sample_str: # pTx RX events during RFs are not ADCs
                         adc_samples = float(sample_str)
                         adc_dur = float(adc_str[adc_str.rfind('/')+1:].strip())
                         block.add_adc(adc_dur, adc_samples, ts)
@@ -93,3 +138,32 @@ def read_dsv_inf(file, seq):
                     block.add_trig(trig_dur, trig_type, ts)
 
                 ts_old = ts
+
+            # counters/flags
+            match = re.search(adc_time_pattern, line)
+            if match:
+                adc_time = int(match.group(1))
+                counters_flags.append({'adc_time': adc_time, 'counters': {}, 'flags': []})
+
+            match = re.search(counter_pattern, line)
+            if match:
+                name = match.group(1)
+                value = match.group(2)
+                counters_flags[-1]['counters'][name] = int(value)
+            match = re.search(flag_pattern, line)
+            if match:
+                flags_hex = match.group(1)
+                mask = int(flags_hex, 16)
+                counters_flags[-1]['flags'] = [flag for flag, bit in FLAG_BITS.items() if mask & (1 << bit)]
+    
+    # assign counters and flags to ADCs
+    for block in seq.block_list:
+        for ts in block.timestamps:
+            for event in block.timestamps[ts]:
+                if event.type == 'adc':
+                    # find matching counters/flags by adc_time
+                    adc_time = block.start_time + ts
+                    if len(counters_flags) > 0 and counters_flags[0]['adc_time'] == adc_time:
+                        event.counters = counters_flags[0]['counters']
+                        event.flags = counters_flags[0]['flags']
+                        counters_flags.pop(0)
