@@ -310,9 +310,7 @@ class Sequence():
                     # Gradients are either splitted or concatenated, depending on the presence of ADC, RF or Trigger events
                     split = not (event_exceeds['rf'] or event_exceeds['adc'] or event_exceeds['trig'])
                     if split: # split block
-                        split_pt = round(pulseq_time / self.delta_grad)
-                        if ge:
-                            split_pt = np.floor(self.cf_time * pulseq_time / system.grad_raster_time).astype(int)
+                        split_pt = np.floor(round(self.cf_time / system.grad_raster_time * pulseq_time,1)).astype(int)
                         pulseq_events_tmp = self.__init_event_dict()
                         for key, pp_event in pulseq_events.items():
                             if pp_event is None:
