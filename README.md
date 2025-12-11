@@ -4,6 +4,8 @@ Create Pulseq sequence files from Siemens dsv simulation files. The converter wa
 VB/VD files are not supported, as the simulator can not output RF phase data.  
 RF values might be differing slightly compared to the original sequence, as the dsv files contain RF values only on a 5us raster.
 
+**Note that using the IDEA framework requires a research agreement with Siemens. Furthermore, additional agreements apply if product sequence source code is used to create the dsv files. Therefore, the use of Pulseq files generated with dsv2pulseq must comply with these contracts. No Pulseq sequence files may be published that expose vendor product sequences or building blocks involved in these sequences without an explicit permission of the vendor.**
+
 ## Installation
 
 The package can be install with `pip install dsv2pulseq`.
