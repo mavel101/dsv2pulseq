@@ -609,7 +609,7 @@ class Sequence():
                                     grad_ts[axis] = grad_start
                                     grad_end_last[axis] = grad_end
 
-                            elif grad_end > grad_end_last[axis]:
+                            elif g is not None and grad_end > grad_end_last[axis]:
                                 grad_dur_new = g.duration + grad_end - grad_end_last[axis]
                                 shape_end_new = g.shape_ix.stop + (grad_end - grad_end_last[axis]) // self.delta_grad
                                 g.duration = g.ramp_up = grad_dur_new
