@@ -161,88 +161,143 @@ def check_dsv(file_prefix1, file_prefix2, time_shift=20):
         len_nco = min(len(nco1), len(nco2))
         plot_nco = True
 
+    t_rf1 = 1e-6 * np.arange(len(rfd1)) * seq1.delta_rf
+    t_gx1 = 1e-6 * np.arange(len(grx1)) * seq1.delta_grad
+    t_gy1 = 1e-6 * np.arange(len(gry1)) * seq1.delta_grad
+    t_gz1 = 1e-6 * np.arange(len(grz1)) * seq1.delta_grad
+    t_adc1 = 1e-6 * np.arange(len(adc1)) * adc_delta if plot_adc else None
+    t_nco1 = 1e-6 * np.arange(len(nco1)) * nc_delta if plot_nco else None
+    t_rf2 = 1e-6 * np.arange(len(rfd2)) * seq2.delta_rf
+    t_gx2 = 1e-6 * np.arange(len(grx2)) * seq2.delta_grad
+    t_gy2 = 1e-6 * np.arange(len(gry2)) * seq2.delta_grad
+    t_gz2 = 1e-6 * np.arange(len(grz2)) * seq2.delta_grad
+    t_adc2 = 1e-6 * np.arange(len(adc2)) * adc_delta if plot_adc else None
+    t_nco2 = 1e-6 * np.arange(len(nco2)) * nc_delta if plot_nco else None
+    t_rf_diff = 1e-6 * np.arange(len_rf) * seq1.delta_rf
+    t_gx_diff = 1e-6 * np.arange(len_gx) * seq1.delta_grad
+    t_gy_diff = 1e-6 * np.arange(len_gy) * seq1.delta_grad
+    t_gz_diff = 1e-6 * np.arange(len_gz) * seq1.delta_grad
+    t_adc_diff = 1e-6 * np.arange(len_adc) * adc_delta if plot_adc else None
+    t_nco_diff = 1e-6 * np.arange(len_nco) * nc_delta if plot_nco else None
+
     # Plot sequence 1
     n_subplots = subplots  # 5 or 6
     plt.figure(figsize=(10, 2 * n_subplots))
-    plt.suptitle(f"Sequence 1: {file_prefix1}", fontsize=16)
+    plt.suptitle(f"Sequence 1: {os.path.basename(file_prefix1)}", fontsize=16)
     plt.subplot(n_subplots, 1, 1)
-    plt.plot(rfd1)
+    plt.plot(t_rf1, rfd1)
+    plt.xlabel("t [s]")
+    plt.ylabel("RF mag [V]")
     plt.title("RFD")
     plt.subplot(n_subplots, 1, 2)
-    plt.plot(rfp1)
+    plt.plot(t_rf1, rfp1)
+    plt.xlabel("t [s]")
+    plt.ylabel("RF phase [deg]")
     plt.title("RFP")
     plt.subplot(n_subplots, 1, 3)
-    plt.plot(grx1)
+    plt.plot(t_gx1, grx1)
+    plt.xlabel("t [s]")
+    plt.ylabel("Gx [mT/m]")
     plt.title("GX")
     plt.subplot(n_subplots, 1, 4)
-    plt.plot(gry1)
+    plt.plot(t_gy1, gry1)
+    plt.xlabel("t [s]")
+    plt.ylabel("Gy [mT/m]")
     plt.title("GY")
     plt.subplot(n_subplots, 1, 5)
-    plt.plot(grz1)
+    plt.plot(t_gz1, grz1)
+    plt.xlabel("t [s]")
+    plt.ylabel("Gz [mT/m]")
     plt.title("GZ")
     if plot_adc:
         plt.subplot(n_subplots, 1, 6)
-        plt.plot(adc1)
+        plt.plot(t_adc1, adc1)
+        plt.xlabel("t [s]")
         plt.title("ADC")
     if plot_nco:
         plt.subplot(n_subplots, 1, n_subplots)
-        plt.plot(nco1)
+        plt.plot(t_nco1, nco1)
+        plt.xlabel("t [s]")
         plt.title("NC1")
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     # Plot sequence 2
     plt.figure(figsize=(10, 2 * n_subplots))
-    plt.suptitle(f"Sequence 2: {file_prefix2}", fontsize=16)
+    plt.suptitle(f"Sequence 2: {os.path.basename(file_prefix2)}", fontsize=16)
     plt.subplot(n_subplots, 1, 1)
-    plt.plot(rfd2)
+    plt.plot(t_rf2, rfd2)
+    plt.xlabel("t [s]")
+    plt.ylabel("RF mag [V]")
     plt.title("RFD")
     plt.subplot(n_subplots, 1, 2)
-    plt.plot(rfp2)
+    plt.plot(t_rf2, rfp2)
+    plt.xlabel("t [s]")
+    plt.ylabel("RF phase [deg]")
     plt.title("RFP")
     plt.subplot(n_subplots, 1, 3)
-    plt.plot(grx2)
+    plt.plot(t_gx2, grx2)
+    plt.xlabel("t [s]")
+    plt.ylabel("Gx [mT/m]")
     plt.title("GX")
     plt.subplot(n_subplots, 1, 4)
-    plt.plot(gry2)
+    plt.plot(t_gy2, gry2)
+    plt.xlabel("t [s]")
+    plt.ylabel("Gy [mT/m]")
     plt.title("GY")
     plt.subplot(n_subplots, 1, 5)
-    plt.plot(grz2)
+    plt.plot(t_gz2, grz2)
+    plt.xlabel("t [s]")
+    plt.ylabel("Gz [mT/m]")
     plt.title("GZ")
     if plot_adc:
         plt.subplot(n_subplots, 1, 6)
-        plt.plot(adc2)
+        plt.plot(t_adc2, adc2)
+        plt.xlabel("t [s]")
         plt.title("ADC")
     if plot_nco:
         plt.subplot(n_subplots, 1, n_subplots)
-        plt.plot(nco2)
+        plt.plot(t_nco2, nco2)
+        plt.xlabel("t [s]")
         plt.title("NC1")
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     # Plot difference
     plt.figure(figsize=(10, 2 * n_subplots))
-    plt.suptitle(f"Difference: {file_prefix1} - {file_prefix2}", fontsize=16)
+    plt.suptitle(f"Difference: {os.path.basename(file_prefix1)} - {os.path.basename(file_prefix2)}", fontsize=16)
     plt.subplot(n_subplots, 1, 1)
-    plt.plot(rfd1[:len_rf] - rfd2[:len_rf])
+    plt.plot(t_rf_diff, rfd1[:len_rf] - rfd2[:len_rf])
+    plt.xlabel("t [s]")
+    plt.ylabel("RF mag [V]")
     plt.title("RFD")
     plt.subplot(n_subplots, 1, 2)
-    plt.plot(rfp1[:len_rf] - rfp2[:len_rf])
+    plt.plot(t_rf_diff, rfp1[:len_rf] - rfp2[:len_rf])
+    plt.xlabel("t [s]")
+    plt.ylabel("RF phase [deg]")
     plt.title("RFP")
     plt.subplot(n_subplots, 1, 3)
-    plt.plot(grx1[:len_gx] - grx2[:len_gx])
+    plt.plot(t_gx_diff, grx1[:len_gx] - grx2[:len_gx])
+    plt.xlabel("t [s]")
+    plt.ylabel("Gx [mT/m]")
     plt.title("GX")
     plt.subplot(n_subplots, 1, 4)
-    plt.plot(gry1[:len_gy] - gry2[:len_gy])
+    plt.plot(t_gy_diff, gry1[:len_gy] - gry2[:len_gy])
+    plt.xlabel("t [s]")
+    plt.ylabel("Gy [mT/m]")
     plt.title("GY")
     plt.subplot(n_subplots, 1, 5)
-    plt.plot(grz1[:len_gz] - grz2[:len_gz])
+    plt.plot(t_gz_diff, grz1[:len_gz] - grz2[:len_gz])
+    plt.xlabel("t [s]")
+    plt.ylabel("Gz [mT/m]")
     plt.title("GZ")
     if plot_adc:
         plt.subplot(n_subplots, 1, 6)
-        plt.plot(adc1[:len_adc] - adc2[:len_adc])
+        plt.plot(t_adc_diff, adc1[:len_adc] - adc2[:len_adc])
+        plt.xlabel("t [s]")
         plt.title("ADC")
     if plot_nco:
         plt.subplot(n_subplots, 1, n_subplots)
-        plt.plot(nco1[:len_nco] - nco2[:len_nco])
+        plt.plot(t_nco_diff, nco1[:len_nco] - nco2[:len_nco])
+        plt.xlabel("t [s]")
         plt.title("NC1")
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
