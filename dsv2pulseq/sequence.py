@@ -229,6 +229,14 @@ class Sequence():
         Set ADC dead time
         """
         self.adc_dead_time = adc_dead_time
+    
+    def set_gamma(self, gamma_mhz_per_t):
+        """
+        Set gyromagnetic ratio in MHz/T.
+        Updates both gamma and the gradient conversion factor.
+        """
+        self.gamma = gamma_mhz_per_t * 1e6  # Convert MHz/T to Hz/T
+        self.cf_grad = 1e-3*self.gamma # mT/m to Hz/m
 
     def make_pulseq_sequence(self, filename=None, fov=[None, None, None], highgain=False, add_labels=False, ge=False):
         """

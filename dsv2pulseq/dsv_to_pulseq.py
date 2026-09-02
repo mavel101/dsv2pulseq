@@ -12,6 +12,7 @@ defaults = {
     'hold_time': 30,
     'adc_dead_time': 10,
     'fov': [None, None, None],
+    'gamma': 42.576,  # Default: proton gyromagnetic ratio [MHz/T]
 }
 
 def parse_arguments(argv=None):
@@ -22,6 +23,7 @@ def parse_arguments(argv=None):
     parser.add_argument('in_file_prefix', type=str, help="Input dsv file prefix. E.g. 'gre'")
     parser.add_argument('-o', '--out_file', type=str, help='Output Pulseq file.')
     parser.add_argument('-r', '--ref_volt', type=float, help='Reference voltage of simulation [V].')
+    parser.add_argument('-g', '--gamma', type=float, help='Gyromagnetic ratio [MHz/T]. Default is 42.576 (1H).')
     parser.add_argument('--lead_time', type=int, help='RF lead time [us].')
     parser.add_argument('--hold_time', type=int, help='RF hold time [us].')
     parser.add_argument('--adc_dead_time', type=int, help='ADC dead time [us].')
@@ -46,6 +48,7 @@ def main(argv=None):
     seq = read_dsv(args.in_file_prefix, args.ref_volt, plot=False)
     seq.set_lead_hold_time(args.lead_time, args.hold_time)
     seq.set_adc_dead_time(args.adc_dead_time)
+    seq.set_gamma(args.gamma)  # Override gyromagnetic ratio with user-provided value
     seq.make_pulseq_sequence(args.out_file, fov=args.fov, highgain=args.highgain, add_labels=args.add_labels, ge=False)
 
 if __name__ == "__main__":
