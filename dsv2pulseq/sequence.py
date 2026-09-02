@@ -296,7 +296,7 @@ class Sequence():
 
         labels = []
         for ix, block in enumerate(block_list):
-            block_offset = block_list[ix - 1].block_duration if ix > 0 else 0
+            block_offset = block_list[ix - 1].block_duration if ix > 0 else block_list[0].start_time # changed otherwise the first block would start at time 0, leading to timing errors
             ts_offset -= block_offset # offset time if Siemens block is splitted
             for ts in block.timestamps:
                 events = block.timestamps[ts]
