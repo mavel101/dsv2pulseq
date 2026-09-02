@@ -570,6 +570,23 @@ class Sequence():
         # Deep copy to avoid modifying original blocks or event lists
         block_list_shifted = copy.deepcopy(self.block_list)
 
+        # Some POET simulations (e.g. TERRA.X, XA60) superimpose ADC events on every RF event on simulation (not sure why).
+        # These ADC events should NOT be copied into the Pulseq sequence, as the simulation does not recognise them
+        # and will attempt to add another ADC event on top of it, leading to a crash. Therefore, we filter out ADC events that
+        # are not concurrrent with any gradient events. This could remove valid ADC events... ?
+        # ===== FILTER ADC EVENTS: Keep only those concurrent with gradients =====
+        for block in block_list_shifted:
+            filtered_timestamps = {}
+            for ts_str, events in block.timestamps.items():
+                has_grad = any(e.type[0] == 'g' for e in events)  # Check for any gradient
+                if has_grad:
+                    filtered_timestamps[ts_str] = events  # Keep all events
+                else:
+                    # Remove ADC events where no gradients exist
+                    filtered_timestamps[ts_str] = [e for e in events if e.type != 'adc']
+            block.timestamps = filtered_timestamps
+        # ========================================================================
+
         # shift by a minimum of 2*delta_grad as gradients often end before RF and ADC objects
         # which leads to gradient waveforms containing only one point
         ts_shift = {'rf': max(self.rf_lead_time, 2*self.delta_grad), 'adc': max(self.adc_dead_time, 2*self.delta_grad)}
