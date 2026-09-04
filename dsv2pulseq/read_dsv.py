@@ -5,6 +5,7 @@ import os
 from dsv2pulseq.sequence import Sequence
 from dsv2pulseq.read_dsv_samples import DSVFile
 from dsv2pulseq.read_dsv_inf import read_dsv_inf
+from dsv2pulseq.pro_orientation import channel_map_from_pro
 
 logging.basicConfig(level=logging.INFO)
 
@@ -26,27 +27,37 @@ def plot_seq(dsv):
     plt.subplot(515)
     dsv[4].plot()
 
-def read_dsv(file_prefix, ref_volt=223.529007, plot=False):
-    """ 
+def read_dsv(file_prefix, ref_volt=223.529007, plot=False, pro_file=None):
+    """
     Reads dsv files and returns complete sequence
 
     Parameters:
         file_prefix: dsv file prefix, e.g. 'gre'
         ref_volt: reference voltage of the simulation in V
         plot: if True, plots the sequence shapes
+        pro_file: path to the Siemens .pro protocol dump this sequence was
+            exported from. When given, gradient events are built directly
+            from their declared .INF metadata using the channel/polarity
+            mapping derived from the .pro file's slice orientation (see
+            pro_orientation.channel_map_from_pro), instead of from the
+            sampled GRX/GRY/GRZ waveforms -- which are then not read at all.
     Returns:
         seq: Sequence object containing the shapes and blocks
     """
     seq = Sequence(ref_volt)
 
     # read event shapes
-    logging.info(f"Read RF and gradient shapes of {file_prefix} sequence.")
+    logging.info(f"Read RF{'' if pro_file else ' and gradient'} shapes of {file_prefix} sequence.")
     start_dsv = time.time()
     rfd = DSVFile(file_prefix+"_RFD.dsv")
     rfp = DSVFile(file_prefix+"_RFP.dsv")
-    grx = DSVFile(file_prefix+"_GRX.dsv")
-    gry = DSVFile(file_prefix+"_GRY.dsv")
-    grz = DSVFile(file_prefix+"_GRZ.dsv")
+    if pro_file:
+        grx = gry = grz = None
+        seq.set_channel_map(channel_map_from_pro(pro_file))
+    else:
+        grx = DSVFile(file_prefix+"_GRX.dsv")
+        gry = DSVFile(file_prefix+"_GRY.dsv")
+        grz = DSVFile(file_prefix+"_GRZ.dsv")
     end_dsv = time.time()
     logging.info(f"Finished reading dsv files in {(end_dsv-start_dsv):.2f}s.")
 

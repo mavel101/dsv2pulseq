@@ -14,6 +14,12 @@ from dsv2pulseq.helper import (
     trim_waveform
 )
 
+# Max fractional residual (relative to peak amplitude) between a gradient
+# event's declared (amp, ramp_up, duration, ramp_dn) trapezoid metadata and
+# its actual sampled waveform, to accept it as an ideal trapezoid rather than
+# building an arbitrary-waveform gradient for it.
+TRAP_RESID_TOL = 0.01
+
 COUNTER_MAP = {
     "Line": "LIN",
     "Seg": "SEG",
@@ -109,13 +115,29 @@ class Grad():
         return f"Grad {self.type} (amp: {self.amp} mT/m, dur: {self.duration} us, rut: {self.ramp_up} us, rdt: {self.ramp_dn} us)"
 
     def __init__(self, channel, amp, duration, ramp_up, ramp_dn, shape_ix):
-        self.type = 'g' + channel 
+        self.type = 'g' + channel
         self.channel = channel
         self.amp = amp # amplitude in logical! coordinate system
         self.duration = duration # flat_top + ramp_up
         self.ramp_up = ramp_up
         self.ramp_dn = ramp_dn
         self.shape_ix = shape_ix
+        # Set by make_pulseq_block_list() when no channel_map is available, for
+        # the conservative per-physical-axis placeholder events it synthesizes:
+        # the single original logical (r/p/s) event whose declared .INF
+        # metadata this placeholder's window exactly spans, if any (None once
+        # a second logical event has merged into the same window, since the
+        # single-event metadata no longer describes it).
+        self.source_event = None
+        # Set instead of source_event by make_pulseq_block_list() when a
+        # channel_map (from a .pro file) is available: list of
+        # (event, sign, local_start_us) tuples, one per original logical event
+        # contributing to this placeholder's window, with local_start_us being
+        # that event's own rise-onset time relative to the window's start.
+        # A single-entry list with local_start_us == 0 is the common case (one
+        # clean, unclipped event); anything else needs the events' declared
+        # trapezoids summed to reconstruct the waveform.
+        self.merged_events = None
 
 class Adc():
 
@@ -157,6 +179,13 @@ class Sequence():
         self.gy = np.array([])
         self.gz = np.array([])
 
+        # {'r': (physical_axis, sign), 'p': (...), 's': (...)}, from a .pro
+        # file's slice orientation via pro_orientation.channel_map_from_pro().
+        # When set, gradient events are built directly from their declared
+        # .INF metadata (amp/ramp_up/duration/ramp_dn) instead of the sampled
+        # GRX/GRY/GRZ waveforms -- see make_pulseq_block_list().
+        self.channel_map = None
+
         # raster times
         self.delta_rf = 5 # RF raster times in dsv file [us]
         self.delta_grad = 10 # Gradient raster times in dsv file [us]
@@ -189,15 +218,24 @@ class Sequence():
         return self.block_list[idx]
 
     def set_shapes(self, shapes):
+        """shapes[2:5] (GRX/GRY/GRZ) may be None when a channel_map is set
+        (see set_channel_map): gradient events are then built directly from
+        their declared .INF metadata, so the sampled waveforms aren't needed."""
 
         rfd = shapes[0].values * shapes[0].definitions.maxlimit / np.max(shapes[0].values)
         rf = rfd * np.exp(1j*np.deg2rad(shapes[1].values))
         self.rf = rf
-        self.gx = shapes[2].values
-        self.gy = shapes[3].values
-        self.gz = shapes[4].values
         self.delta_rf = int(shapes[0].definitions.horidelta)
-        self.delta_grad= int(shapes[2].definitions.horidelta)
+        if len(shapes) > 2 and shapes[2] is not None:
+            self.gx = shapes[2].values
+            self.gy = shapes[3].values
+            self.gz = shapes[4].values
+            self.delta_grad = int(shapes[2].definitions.horidelta)
+
+    def set_channel_map(self, channel_map):
+        """channel_map: {'r': (physical_axis, sign), 'p': (...), 's': (...)},
+        from pro_orientation.channel_map_from_pro(). See __init__."""
+        self.channel_map = channel_map
 
     def get_shape(self, event):
         """
@@ -455,6 +493,106 @@ class Sequence():
             rf.signal = rf_sig * self.cf_rf # reset the signal as it gets scaled in make_arbitrary_rf
             return rf
 
+    def __ideal_trapezoid(self, amp, rise_time, flat_time, fall_time, n_samples):
+        """
+        Ideal trapezoid, sampled at the DSV's own bin-center convention
+        (t = (k+0.5)*delta_grad) so it lines up with the real DSV samples.
+        t=0 is the start of the window (rise begins immediately).
+        """
+        t = (np.arange(n_samples) + 0.5) * self.delta_grad
+        g = np.zeros(n_samples)
+        if rise_time > 0:
+            m = t < rise_time
+            g[m] = amp * t[m] / rise_time
+        m = (t >= rise_time) & (t < rise_time + flat_time)
+        g[m] = amp
+        if fall_time > 0:
+            m = (t >= rise_time + flat_time) & (t < rise_time + flat_time + fall_time)
+            g[m] = amp * (1 - (t[m] - rise_time - flat_time) / fall_time)
+        return g
+
+    def __check_trapezoid(self, grad_event):
+        """
+        If grad_event's window was attributed (by make_pulseq_block_list) to
+        a single original logical (r/p/s) event, builds the ideal trapezoid
+        that event's declared .INF metadata (amp, ramp_up, duration, ramp_dn)
+        implies, and verifies it against the actual sampled waveform before
+        accepting it. Verification matters because two logical events can
+        genuinely overlap in physical time (e.g. a VENC lobe riding on a
+        slice-select refocusing lobe) and sum on the same physical channel --
+        that can't be described by either single declared event's metadata
+        alone, and shows up as a large residual here, so it correctly falls
+        back to the arbitrary-waveform path instead of producing a wrong
+        trapezoid.
+
+        get_shape()'s logical (r/p/s) -> physical (x/y/z) channel mapping is
+        only valid for transversal, PE A->P orientation (see get_shape's
+        docstring), so for other orientations the metadata amp's sign need
+        not match the physical channel's sign -- anchor polarity to the
+        observed peak instead of trusting the metadata sign.
+
+        Returns (amp, rise_time, flat_time, fall_time) in DSV units (mT/m,
+        us) if accepted, otherwise None.
+        """
+        src = grad_event.source_event
+        if src is None or src.ramp_up <= 0 or src.ramp_dn <= 0:
+            return None
+        wf = self.get_shape(grad_event)
+        if len(wf) == 0:
+            return None
+        peak = np.max(np.abs(wf))
+        if peak < 1e-6:
+            return None
+        sign = np.sign(wf[np.argmax(np.abs(wf))])
+        amp_signed = sign * abs(src.amp)
+        rise_time = src.ramp_up
+        flat_time = src.duration - src.ramp_up
+        fall_time = src.ramp_dn
+        ideal = self.__ideal_trapezoid(amp_signed, rise_time, flat_time, fall_time, len(wf))
+        max_resid_frac = np.max(np.abs(wf - ideal)) / peak
+        if max_resid_frac >= TRAP_RESID_TOL:
+            return None
+        return amp_signed, rise_time, flat_time, fall_time
+
+    def __make_pp_grad_from_metadata(self, grad_event, event_del, system):
+        """
+        Builds a gradient event directly from its declared .INF metadata via
+        channel_map, with no dependence on sampled GRX/GRY/GRZ waveforms. A
+        single, unclipped contributing event becomes an exact pp.make_trapezoid;
+        multiple (genuinely overlapping logical events summing on the same
+        physical channel, e.g. a VENC lobe riding on a slice-select refocusing
+        lobe) are synthesized into an arbitrary waveform by summing each
+        event's own ideal trapezoid.
+        """
+        events = grad_event.merged_events
+        if len(events) == 1 and events[0][2] == 0:
+            event, sign, _ = events[0]
+            g_del = round_to_raster(event_del * self.cf_time, system.grad_raster_time)
+            return pp.make_trapezoid(
+                channel=grad_event.channel,
+                amplitude=sign * event.amp * self.cf_grad,
+                rise_time=event.ramp_up * self.cf_time,
+                flat_time=(event.duration - event.ramp_up) * self.cf_time,
+                fall_time=event.ramp_dn * self.cf_time,
+                delay=g_del,
+                system=system,
+            )
+
+        n = round(grad_event.duration / self.delta_grad)
+        wf = np.zeros(n)
+        for event, sign, local_start_us in events:
+            n_ev = round((event.duration + event.ramp_dn) / self.delta_grad)
+            ideal = self.__ideal_trapezoid(sign * event.amp, event.ramp_up, event.duration - event.ramp_up,
+                                            event.ramp_dn, n_ev)
+            start_idx = round(local_start_us / self.delta_grad)
+            lo, hi = max(0, start_idx), min(n, start_idx + n_ev)
+            if hi > lo:
+                wf[lo:hi] += ideal[lo - start_idx: hi - start_idx]
+        wf *= self.cf_grad
+
+        g_del = round_to_raster(event_del * self.cf_time, system.grad_raster_time)
+        return self.__make_arbitrary_grad(wf, grad_event.channel, delay=g_del, system=system)
+
     def __make_pp_grad(self, grad_event, event_del, system, ge=False):
         """
         Make a Pulseq gradient event
@@ -463,7 +601,28 @@ class Sequence():
         if grad_event.duration == 0 and grad_event.ramp_up == 0:
             # zero duration gradient
             return None
-        
+
+        if grad_event.merged_events is not None:
+            return self.__make_pp_grad_from_metadata(grad_event, event_del, system)
+
+        trap_fit = self.__check_trapezoid(grad_event)
+        if trap_fit is not None:
+            amp, rise_time, flat_time, fall_time = trap_fit
+            g_del = round_to_raster(event_del * self.cf_time, system.grad_raster_time)
+            try:
+                return pp.make_trapezoid(
+                    channel=grad_event.channel,
+                    amplitude=amp * self.cf_grad,
+                    rise_time=rise_time * self.cf_time,
+                    flat_time=flat_time * self.cf_time,
+                    fall_time=fall_time * self.cf_time,
+                    delay=g_del,
+                    system=system,
+                )
+            except Exception as e:
+                logging.warning(f"Trapezoid fit for {grad_event.type} event rejected by pypulseq ({e}); "
+                                 "falling back to arbitrary waveform.")
+
         # waveform
         g_wf = self.get_shape(grad_event) * self.cf_grad
         if ge:
@@ -549,9 +708,20 @@ class Sequence():
         - RF events are shifted by the RF lead time to not violate it
         - ADC events are shifted by the ADC dead time to not violate it
 
-        Additionally, gradient events are created on all axes for all time periods where a gradient is present on any axis.
-        Gradient timing from the INF file is in logical coordinates, while gradient waveforms (GRX/GRY/GRZ) are in physical coordinates. 
-        Since the rotation matrix is unavailable, we conservatively assume all axes are active wherever any axis has gradient activity.
+        Gradient handling depends on whether channel_map is set (see
+        set_channel_map / __init__):
+        - Without one: gradient events are created on all 3 physical axes for
+          every time period where a gradient is present on ANY logical axis.
+          Gradient timing from the INF file is in logical coordinates, while
+          gradient waveforms (GRX/GRY/GRZ) are in physical coordinates. Since
+          the rotation matrix is unavailable, we conservatively assume all
+          axes are active wherever any axis has gradient activity, relying on
+          GRX/GRY/GRZ sample data (via get_shape) for channel identity.
+        - With one: channel_map gives the exact physical channel and polarity
+          each logical (r/p/s) channel drives, so each event is placed
+          directly on its one physical channel -- a phase-encode blip can
+          never spuriously extend/merge into the readout channel's window,
+          for instance -- and GRX/GRY/GRZ are never consulted.
 
         Returns:
         --------
@@ -566,12 +736,26 @@ class Sequence():
         # which leads to gradient waveforms containing only one point
         ts_shift = {'rf': max(self.rf_lead_time, 2*self.delta_grad), 'adc': max(self.adc_dead_time, 2*self.delta_grad)}
 
-        grad_offset = {'x': 0, 'y': 0, 'z': 0}
+        if self.channel_map:
+            self.__assign_gradients_by_channel_map(block_list_shifted, ts_shift)
+        else:
+            self.__assign_gradients_conservative(block_list_shifted, ts_shift)
+
+        return block_list_shifted, ts_shift
+
+    def __assign_gradients_conservative(self, block_list_shifted, ts_shift):
+        """Gradient assignment used when no channel_map is available (see
+        make_pulseq_block_list): gradient events are created on all 3
+        physical axes for every time period where a gradient is present on
+        ANY logical axis, relying on GRX/GRY/GRZ sample data (via get_shape)
+        for channel identity."""
+        keys = ('x', 'y', 'z')
+        grad_offset = {k: 0 for k in keys}
         for block in block_list_shifted:
             shifted_timestamps = {}
-            grad_ts = {'x': 0, 'y': 0, 'z': 0}
-            grad_end_last = {'x': 0, 'y': 0, 'z': 0}
-            grads = {'x': None, 'y': None, 'z': None}
+            grad_ts = {k: 0 for k in keys}
+            grad_end_last = {k: 0 for k in keys}
+            grads = {k: None for k in keys}
 
             for ts_str in block.timestamps:
                 ts = int(ts_str)
@@ -604,6 +788,13 @@ class Sequence():
                                     grads[axis] = None
 
                                 grad = Grad(axis, 0, grad_dur, grad_dur, 0, shape_ix)
+                                # Attribute this placeholder to the single logical event whose
+                                # declared .INF metadata it exactly spans, if it isn't clipped by
+                                # grad_offset (an earlier gradient on this axis extending past its
+                                # own block) -- __check_trapezoid uses this to try the exact
+                                # scanner-declared trapezoid instead of a data-only fit.
+                                if grad_start == ts and grad_dur == event.duration + event.ramp_dn:
+                                    grad.source_event = event
                                 if any(self.get_shape(grad)):
                                     grads[axis] = grad
                                     grad_ts[axis] = grad_start
@@ -614,6 +805,7 @@ class Sequence():
                                 shape_end_new = g.shape_ix.stop + (grad_end - grad_end_last[axis]) // self.delta_grad
                                 g.duration = g.ramp_up = grad_dur_new
                                 g.shape_ix = slice(g.shape_ix.start, shape_end_new)
+                                g.source_event = None  # window now spans more than one logical event
                                 grad_end_last[axis] = grad_end
 
                     else:
@@ -628,4 +820,83 @@ class Sequence():
                 sorted(((ts, evts) for ts, evts in shifted_timestamps.items()), key=lambda x: int(x[0]))
             )
 
-        return block_list_shifted, ts_shift
+    def __assign_gradients_by_channel_map(self, block_list_shifted, ts_shift):
+        """
+        Gradient assignment used when channel_map is available (see
+        make_pulseq_block_list): each logical (r/p/s) event is placed
+        directly on its one physical channel and polarity, tracked in
+        absolute time so a group can span multiple Siemens blocks correctly
+        (e.g. one line's residual gradient tail genuinely overlapping the
+        next line's rise -- both real, declared events that must be summed,
+        not two independently-flushed windows). Blocks are only finalized
+        (block.timestamps assigned) after all blocks have been scanned, since
+        a group's flush target is fixed at the block where it started, not
+        wherever it happens to close.
+        """
+        keys = ('r', 'p', 's')
+        grad_end_last = {k: 0 for k in keys}  # absolute time each channel is busy until
+        grad_ts = {k: 0 for k in keys}         # absolute start time of the currently-open group
+        grads = {k: None for k in keys}
+        # (shifted_timestamps dict, block.start_time) of the block that should
+        # receive the currently-open group when it's flushed
+        grad_target = {k: None for k in keys}
+
+        block_dicts = []
+        for block in block_list_shifted:
+            shifted_timestamps = {}
+            block_dicts.append((block, shifted_timestamps))
+
+            for ts_str in block.timestamps:
+                ts = int(ts_str)
+                events = block.timestamps[ts_str]
+
+                if not events:
+                    shifted_timestamps.setdefault(ts, [])
+
+                for event in events:
+                    if event.type == 'rf':
+                        new_ts = ts - ts_shift['rf']
+                        shifted_timestamps.setdefault(new_ts, []).append(event)
+
+                    elif event.type == 'adc':
+                        new_ts = ts - ts_shift['adc']
+                        shifted_timestamps.setdefault(new_ts, []).append(event)
+
+                    elif event.type[0] == 'g':
+                        if abs(event.amp) < 1e-9:
+                            continue  # no physical content; don't perturb merge tracking
+                        ch = event.channel
+                        abs_start = block.start_time + ts
+                        abs_end = abs_start + event.duration + event.ramp_dn
+
+                        if abs_start >= grad_end_last[ch]:
+                            if grads[ch] is not None:
+                                tgt_dict, tgt_block_start = grad_target[ch]
+                                tgt_dict.setdefault(grad_ts[ch] - tgt_block_start, []).append(grads[ch])
+                            axis, sign = self.channel_map[ch]
+                            grad = Grad(axis, 0, abs_end - abs_start, abs_end - abs_start, 0, None)
+                            grad.merged_events = [(event, sign, 0)]
+                            grads[ch] = grad
+                            grad_ts[ch] = abs_start
+                            grad_end_last[ch] = abs_end
+                            grad_target[ch] = (shifted_timestamps, block.start_time)
+                        elif grads[ch] is not None and abs_end > grad_end_last[ch]:
+                            g = grads[ch]
+                            _, sign = self.channel_map[ch]
+                            g.merged_events.append((event, sign, abs_start - grad_ts[ch]))
+                            grad_end_last[ch] = abs_end
+                            g.duration = g.ramp_up = grad_end_last[ch] - grad_ts[ch]
+                        # else: fully covered by the currently-open group already -- nothing new.
+
+                    else:
+                        shifted_timestamps.setdefault(ts, []).append(event)
+
+        for ch in keys:
+            if grads[ch] is not None:
+                tgt_dict, tgt_block_start = grad_target[ch]
+                tgt_dict.setdefault(grad_ts[ch] - tgt_block_start, []).append(grads[ch])
+
+        for block, shifted_timestamps in block_dicts:
+            block.timestamps = dict(
+                sorted(((ts, evts) for ts, evts in shifted_timestamps.items()), key=lambda x: int(x[0]))
+            )

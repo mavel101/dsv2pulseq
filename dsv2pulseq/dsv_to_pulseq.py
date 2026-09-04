@@ -26,6 +26,10 @@ def parse_arguments(argv=None):
     parser.add_argument('--hold_time', type=int, help='RF hold time [us].')
     parser.add_argument('--adc_dead_time', type=int, help='ADC dead time [us].')
     parser.add_argument('--fov', type=float, nargs=3, help='Field of view [mm] for x, y, z.')
+    parser.add_argument('--pro_file', type=str, help='Siemens .pro protocol dump this sequence was exported from. '
+                         'When given, gradients are built directly from their declared .INF metadata using the '
+                         'channel/polarity mapping derived from the .pro file\'s slice orientation, instead of from '
+                         'the sampled GRX/GRY/GRZ waveforms (which are then not read at all).')
     parser.add_argument('--highgain', action='store_true', help='Set receiver gain to high.')
     parser.add_argument('--add_labels', action='store_true', help='Read labels (counters/flags) and add them to the sequence.')
     # parser.add_argument('--ge', action='store_true', help='Convert sequence to GE.')
@@ -37,13 +41,15 @@ def main(argv=None):
     args = parse_arguments(argv)
 
     # check input
-    sfx = ['_INF', '_GRX', '_GRY', '_GRZ', '_RFD', '_RFP']
+    sfx = ['_INF', '_RFD', '_RFP'] if args.pro_file else ['_INF', '_GRX', '_GRY', '_GRZ', '_RFD', '_RFP']
     for suffix in sfx:
         fname = args.in_file_prefix + suffix + '.dsv'
         if not os.path.isfile(fname):
             raise OSError(f"DSV file {fname} does not exist.")
+    if args.pro_file and not os.path.isfile(args.pro_file):
+        raise OSError(f".pro file {args.pro_file} does not exist.")
 
-    seq = read_dsv(args.in_file_prefix, args.ref_volt, plot=False)
+    seq = read_dsv(args.in_file_prefix, args.ref_volt, plot=False, pro_file=args.pro_file)
     seq.set_lead_hold_time(args.lead_time, args.hold_time)
     seq.set_adc_dead_time(args.adc_dead_time)
     seq.make_pulseq_sequence(args.out_file, fov=args.fov, highgain=args.highgain, add_labels=args.add_labels, ge=False)
