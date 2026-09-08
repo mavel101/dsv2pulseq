@@ -1,5 +1,13 @@
 # dsv2pulseq
 
+**Note**: this is a fork of the **dsv2pulseq converter** (https://github.com/mavel101/dsv2pulseq), with the following modifications for **x-nuclei applications on the Terra.X** system:
+- Made the gyromagnetic ratio a user parameter.
+- Adjusted the start time of the first block - this was necessary, but may be a sequence specific fix.
+- Filtered out extra ADC events; POET simulated an ADC event concurrent to every RF event for the Terra.X. Copying these ADC events into the Pulseq sequence led to downstream simulation errors.
+- Note that for x-nuclei applications, the x-nuclei RF simulation outputs (stored in _RF2.dsv and _RP2.dsv) must be used and renamed to the default 1H outputs (_RFD.dsv and _RFP.dsv)
+
+---
+
 Create Pulseq sequence files from Siemens dsv simulation files. The converter was only tested with VE/VX dsv file layouts.
 VB/VD files are not supported, as the simulator can not output RF phase data.  
 RF values might be differing slightly compared to the original sequence, as the dsv files contain RF values only on a 5us raster.
