@@ -13,7 +13,7 @@ dependencies = [
     "numpy",
     "scipy",
     "matplotlib",
-    "pypulseq>=1.4.2.post1",
+    "pypulseq>=1.5.0.post1",
     "ismrmrd>=1.14.1",
     "twixtools>=0.23"
 ]
