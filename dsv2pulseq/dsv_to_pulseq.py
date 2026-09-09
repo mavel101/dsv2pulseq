@@ -13,6 +13,7 @@ defaults = {
     'adc_dead_time': 10,
     'fov': [None, None, None],
     'gamma': 42.576,  # Default: proton gyromagnetic ratio [MHz/T]
+    'os_factor': 2,
 }
 
 def parse_arguments(argv=None):
@@ -30,6 +31,7 @@ def parse_arguments(argv=None):
     parser.add_argument('--fov', type=float, nargs=3, help='Field of view [mm] for x, y, z.')
     parser.add_argument('--highgain', action='store_true', help='Set receiver gain to high.')
     parser.add_argument('--add_labels', action='store_true', help='Read labels (counters/flags) and add them to the sequence.')
+    parser.add_argument('--os_factor', type=int, help='Set readout oversampling factor for the sequence.')
     # parser.add_argument('--ge', action='store_true', help='Convert sequence to GE.')
 
     parser.set_defaults(**defaults)
@@ -49,6 +51,7 @@ def main(argv=None):
     seq.set_lead_hold_time(args.lead_time, args.hold_time)
     seq.set_adc_dead_time(args.adc_dead_time)
     seq.set_gamma(args.gamma)  # Override gyromagnetic ratio with user-provided value
+    seq.set_os_factor(args.os_factor)
     seq.make_pulseq_sequence(args.out_file, fov=args.fov, highgain=args.highgain, add_labels=args.add_labels, ge=False)
 
 if __name__ == "__main__":

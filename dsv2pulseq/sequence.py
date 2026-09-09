@@ -180,6 +180,9 @@ class Sequence():
         # ADC dead time
         self.adc_dead_time = 10 # [us]
 
+        # oversampling factor for readout
+        self.os_factor = 2
+
     def add_block(self, idx, duration, start_time):
         self.n_blocks += 1
         self.duration = start_time + duration
@@ -238,6 +241,12 @@ class Sequence():
         self.gamma = gamma_mhz_per_t * 1e6  # Convert MHz/T to Hz/T
         self.cf_grad = 1e-3*self.gamma # mT/m to Hz/m
 
+    def set_os_factor(self, os_factor):
+        """
+        Set readout oversampling factor for the sequence.
+        """
+        self.os_factor = os_factor
+
     def make_pulseq_sequence(self, filename=None, fov=[None, None, None], highgain=False, add_labels=False, ge=False):
         """
         Create a Pulseq file from the sequence object.
@@ -276,6 +285,7 @@ class Sequence():
 
         pp_seq = pp.Sequence(system=system)
         pp_seq.set_definition('Name', os.path.basename(filename))
+        pp_seq.set_definition('ReadoutOversamplingFactor', str(self.os_factor))
         if all(fov):
             pp_seq.set_definition("FOV", [fov[0]*1e-3, fov[1]*1e-3, fov[2]*1e-3])
         if highgain:
@@ -292,11 +302,12 @@ class Sequence():
             return
 
         # Shift RF and ADC timestamps to account for lead and dead times
-        block_list, ts_shifts = self.make_pulseq_block_list()
+        block_list, ts_shifts, block_offset = self.make_pulseq_block_list()
 
         labels = []
         for ix, block in enumerate(block_list):
-            block_offset = block_list[ix - 1].block_duration if ix > 0 else 0
+            if ix > 0:
+                block_offset = block_list[ix - 1].block_duration
             ts_offset -= block_offset # offset time if Siemens block is splitted
             for ts in block.timestamps:
                 events = block.timestamps[ts]
@@ -575,7 +586,8 @@ class Sequence():
         ts_shift = {'rf': max(self.rf_lead_time, 2*self.delta_grad), 'adc': max(self.adc_dead_time, 2*self.delta_grad)}
 
         grad_offset = {'x': 0, 'y': 0, 'z': 0}
-        for block in block_list_shifted:
+        offset_first_block = 0
+        for ix, block in enumerate(block_list_shifted):
             shifted_timestamps = {}
             grad_ts = {'x': 0, 'y': 0, 'z': 0}
             grad_end_last = {'x': 0, 'y': 0, 'z': 0}
@@ -591,10 +603,14 @@ class Sequence():
                 for event in events:
                     if event.type == 'rf':
                         new_ts = ts - ts_shift['rf']
+                        if ix == 0 and new_ts < 0:
+                            offset_first_block = abs(new_ts) if abs(new_ts) > offset_first_block else offset_first_block
                         shifted_timestamps.setdefault(new_ts, []).append(event)
 
                     elif event.type == 'adc':
                         new_ts = ts - ts_shift['adc']
+                        if ix == 0 and new_ts < 0:
+                            offset_first_block = abs(new_ts) if abs(new_ts) > offset_first_block else offset_first_block
                         shifted_timestamps.setdefault(new_ts, []).append(event)
 
                     elif event.type[0] == 'g':
@@ -636,4 +652,4 @@ class Sequence():
                 sorted(((ts, evts) for ts, evts in shifted_timestamps.items()), key=lambda x: int(x[0]))
             )
 
-        return block_list_shifted, ts_shift
+        return block_list_shifted, ts_shift, offset_first_block
