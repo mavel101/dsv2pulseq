@@ -100,7 +100,8 @@ def read_dsv_inf(file, seq):
                 if line[ix[4]+1:ix[5]].strip():
                     adc_str = line[ix[4]+1:ix[5]].strip()
                     sample_str = adc_str[adc_str.rfind(':')+1:adc_str.rfind('/')].strip()
-                    if 'VOP_READOUT' not in adc_str and 'SMD' not in sample_str: # pTx RX events during RFs are not ADCs
+                    # filter RX events during RFs
+                    if 'VOP_READOUT' not in adc_str and 'RFMonitor' not in adc_str and 'RFInstrData' not in adc_str and 'SMD' not in sample_str:
                         adc_samples = float(sample_str)
                         adc_dur = float(adc_str[adc_str.rfind('/')+1:].strip())
                         block.add_adc(adc_dur, adc_samples, ts)

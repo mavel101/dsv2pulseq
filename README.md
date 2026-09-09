@@ -24,6 +24,7 @@ Simulate the sequence with the following settings:
 - Transversal orientation with phase-encode direction A->P and no FOV shift (which is the default)
 - Simulate with RF phase output (sim /RFP+). 
 - Mandatory dsv files are "_INF", "_RFD", "_RFP", "_GRX", "_GRY" and "_GRZ".
+- Note that for x-nuclei applications, the x-nuclei RF simulation outputs (stored in _RF2.dsv and _RP2.dsv) must be used and renamed to the default 1H outputs (_RFD.dsv and _RFP.dsv).
 
 Example data "MiniFLASH.dsv" can be found in the test/test_data folder. These simulation files are from the Siemens MiniFLASH demo sequence.
 
