@@ -45,10 +45,10 @@ seq = read_dsv('/path/to/dsv/dsv_prefix')
 seq_pulseq = seq.make_pulseq_sequence('external.seq')
 ```
 
-There is an experimental function to check the shapes of RF waveforms and gradients that plots the difference between the original and converted waveforms:
+There is an experimental function 'check_dsv' to check the shapes of RF waveforms and gradients that plots the difference between the original and converted waveforms. A delay between the original and the converted sequence might be present, if the Pulseq sequence is simulated with FOV positioning enabled (20 us delay for a frequency/phase event) or if the sequence starts with an RF pulse (delay is the coil lead tine - usually 100 us) or an ADC object (delay is the ADC dead time - usually 10 us). This delay does not affect the timing of the sequence, but it has to be specified for correct plotting:
 ```
 from dsv2pulseq import check_dsv
-check_dsv('/path_to_dsv/dsv_prefix_original', 'path_to_dsv/dsv_prefix_pulseq')
+check_dsv('/path_to_dsv/dsv_prefix_original', 'path_to_dsv/dsv_prefix_pulseq', time_shift=20)
 ```
 
 Note that:  
